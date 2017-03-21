@@ -37,6 +37,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
@@ -469,7 +470,7 @@ public class Realm extends BaseRealm {
      * a new {@link RealmObject} is created and a field is not found in the JSON object, that field will be assigned the
      * default value for the field type.
      *
-     * @param clazz type of {@link io.realm.RealmObject} to create or update. It must have a primary key defined.
+     * @param clazz type of {@link RealmObject} to create or update. It must have a primary key defined.
      * @param json array with object data.
      * @throws IllegalArgumentException if trying to update a class without a {@link io.realm.annotations.PrimaryKey}.
      * @throws IllegalArgumentException if the JSON object doesn't have a primary key property but the corresponding
@@ -477,19 +478,22 @@ public class Realm extends BaseRealm {
      * @throws RealmException if unable to map JSON.
      * @see #createAllFromJson(Class, org.json.JSONArray)
      */
-    public <E extends RealmModel> void createOrUpdateAllFromJson(Class<E> clazz, JSONArray json) {
+    public <E extends RealmModel> List<E> createOrUpdateAllFromJson(Class<E> clazz, JSONArray json) {
         if (clazz == null || json == null) {
-            return;
+            return null;
         }
         checkIfValid();
         checkHasPrimaryKey(clazz);
+        List<E> list = new ArrayList<>(json.length());
         for (int i = 0; i < json.length(); i++) {
             try {
-                configuration.getSchemaMediator().createOrUpdateUsingJsonObject(clazz, this, json.getJSONObject(i), true);
+                list.add(configuration.getSchemaMediator().createOrUpdateUsingJsonObject(clazz, this, json.getJSONObject(i), true));
             } catch (JSONException e) {
                 throw new RealmException("Could not map JSON", e);
             }
         }
+
+        return list;
     }
 
     /**
@@ -525,7 +529,7 @@ public class Realm extends BaseRealm {
      * If a new {@link RealmObject} is created and a field is not found in the JSON object, that field will be assigned
      * the default value for the field type.
      *
-     * @param clazz type of {@link io.realm.RealmObject} to create or update. It must have a primary key defined.
+     * @param clazz type of {@link RealmObject} to create or update. It must have a primary key defined.
      * @param json string with an array of JSON objects.
      * @throws IllegalArgumentException if trying to update a class without a {@link io.realm.annotations.PrimaryKey}.
      * @throws RealmException if unable to create a JSON array from the json string.
@@ -533,9 +537,9 @@ public class Realm extends BaseRealm {
      * {@link RealmObjectSchema} has a {@link io.realm.annotations.PrimaryKey} defined.
      * @see #createAllFromJson(Class, String)
      */
-    public <E extends RealmModel> void createOrUpdateAllFromJson(Class<E> clazz, String json) {
+    public <E extends RealmModel> List<E> createOrUpdateAllFromJson(Class<E> clazz, String json) {
         if (clazz == null || json == null || json.length() == 0) {
-            return;
+            return null;
         }
         checkIfValid();
         checkHasPrimaryKey(clazz);
@@ -547,7 +551,7 @@ public class Realm extends BaseRealm {
             throw new RealmException("Could not create JSON array from string", e);
         }
 
-        createOrUpdateAllFromJson(clazz, arr);
+        return createOrUpdateAllFromJson(clazz, arr);
     }
 
     /**
@@ -592,7 +596,7 @@ public class Realm extends BaseRealm {
      * <p>
      * This API is only available in API level 11 or later.
      *
-     * @param clazz type of {@link io.realm.RealmObject} to create or update. It must have a primary key defined.
+     * @param clazz type of {@link RealmObject} to create or update. It must have a primary key defined.
      * @param in the InputStream with a list of object data in JSON format.
      * @throws IllegalArgumentException if trying to update a class without a {@link io.realm.annotations.PrimaryKey}.
      * @throws IllegalArgumentException if the JSON object doesn't have a primary key property but the corresponding
@@ -601,9 +605,9 @@ public class Realm extends BaseRealm {
      * @see #createOrUpdateAllFromJson(Class, java.io.InputStream)
      */
     @TargetApi(Build.VERSION_CODES.HONEYCOMB)
-    public <E extends RealmModel> void createOrUpdateAllFromJson(Class<E> clazz, InputStream in) throws IOException {
+    public <E extends RealmModel> List<E> createOrUpdateAllFromJson(Class<E> clazz, InputStream in) throws IOException {
         if (clazz == null || in == null) {
-            return;
+            return null;
         }
         checkIfValid();
         checkHasPrimaryKey(clazz);
@@ -611,11 +615,13 @@ public class Realm extends BaseRealm {
         // As we need the primary key value we have to first parse the entire input stream as in the general
         // case that value might be the last property. :(
         Scanner scanner = null;
+        List<E> list;
         try {
             scanner = getFullStringScanner(in);
             JSONArray json = new JSONArray(scanner.next());
+            list = new ArrayList<>(json.length());
             for (int i = 0; i < json.length(); i++) {
-                configuration.getSchemaMediator().createOrUpdateUsingJsonObject(clazz, this, json.getJSONObject(i), true);
+                list.add(configuration.getSchemaMediator().createOrUpdateUsingJsonObject(clazz, this, json.getJSONObject(i), true));
             }
         } catch (JSONException e) {
             throw new RealmException("Failed to read JSON", e);
@@ -624,6 +630,8 @@ public class Realm extends BaseRealm {
                 scanner.close();
             }
         }
+
+        return list;
     }
 
     /**
