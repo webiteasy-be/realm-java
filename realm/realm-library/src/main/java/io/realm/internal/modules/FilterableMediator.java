@@ -124,9 +124,22 @@ public class FilterableMediator extends RealmProxyMediator {
     }
 
     @Override
+    public <E extends RealmModel> E getManaged(Realm realm, E object, Map<RealmModel, RealmObjectProxy> cache) {
+        checkSchemaHasClass(Util.getOriginalModelClass(object.getClass()));
+        return originalMediator.getManaged(realm, object, cache);
+    }
+
+    @Override
+    @Deprecated
     public <E extends RealmModel> E copyOrUpdate(Realm realm, E object, boolean update, Map<RealmModel, RealmObjectProxy> cache) {
         checkSchemaHasClass(Util.getOriginalModelClass(object.getClass()));
-        return originalMediator.copyOrUpdate(realm, object, update, cache);
+        return originalMediator.copyOrUpdate(realm, object, update, cache, null);
+    }
+
+    @Override
+    public <E extends RealmModel> E copyOrUpdate(Realm realm, E object, boolean update, Map<RealmModel, RealmObjectProxy> cache, List<String> fields) {
+        checkSchemaHasClass(Util.getOriginalModelClass(object.getClass()));
+        return originalMediator.copyOrUpdate(realm, object, update, cache, fields);
     }
 
     @Override

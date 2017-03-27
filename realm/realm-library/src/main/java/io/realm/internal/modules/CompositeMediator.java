@@ -109,9 +109,22 @@ public class CompositeMediator extends RealmProxyMediator {
     }
 
     @Override
+    public <E extends RealmModel> E getManaged(Realm realm, E object, Map<RealmModel, RealmObjectProxy> cache) {
+        RealmProxyMediator mediator = getMediator(Util.getOriginalModelClass(object.getClass()));
+        return mediator.getManaged(realm, object, cache);
+    }
+
+    @Override
+    @Deprecated
     public <E extends RealmModel> E copyOrUpdate(Realm realm, E object, boolean update, Map<RealmModel, RealmObjectProxy> cache) {
         RealmProxyMediator mediator = getMediator(Util.getOriginalModelClass(object.getClass()));
-        return mediator.copyOrUpdate(realm, object, update, cache);
+        return mediator.copyOrUpdate(realm, object, update, cache, null);
+    }
+
+    @Override
+    public <E extends RealmModel> E copyOrUpdate(Realm realm, E object, boolean update, Map<RealmModel, RealmObjectProxy> cache, List<String> fields) {
+        RealmProxyMediator mediator = getMediator(Util.getOriginalModelClass(object.getClass()));
+        return mediator.copyOrUpdate(realm, object, update, cache, fields);
     }
 
     @Override
