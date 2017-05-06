@@ -123,40 +123,13 @@ public abstract class RealmProxyMediator {
      * any changes to the original object will not be persisted.
      *
      * @param realm the reference to the {@link Realm} where the object will be copied.
-     * @param object the object to get managed version from.
-     * {@code false} otherwise.
-     * @param cache the cache for mapping between unmanaged objects and their {@link RealmObjectProxy} representation.
-     * @return the managed Realm object or null if Real has no managed version
-     */
-    public abstract <E extends RealmModel> E getManaged(Realm realm, E object, Map<RealmModel, RealmObjectProxy> cache);
-
-    /**
-     * Copies an unmanaged {@link RealmObject} or a RealmObject from another Realm to this Realm. After being copied
-     * any changes to the original object will not be persisted.
-     *
-     * @param realm the reference to the {@link Realm} where the object will be copied.
      * @param object the object to copy properties from.
      * @param update {@code true} if object has a primary key and should try to update already existing data,
      * {@code false} otherwise.
      * @param cache the cache for mapping between unmanaged objects and their {@link RealmObjectProxy} representation.
      * @return the managed Realm object.
      */
-    @Deprecated
     public abstract <E extends RealmModel> E copyOrUpdate(Realm realm, E object, boolean update, Map<RealmModel, RealmObjectProxy> cache);
-
-    /**
-     * Copies an unmanaged {@link RealmObject} or a RealmObject from another Realm to this Realm. After being copied
-     * any changes to the original object will not be persisted.
-     *
-     * @param realm the reference to the {@link Realm} where the object will be copied.
-     * @param object the object to copy properties from.
-     * @param update {@code true} if object has a primary key and should try to update already existing data,
-     * {@code false} otherwise.
-     * @param cache the cache for mapping between unmanaged objects and their {@link RealmObjectProxy} representation.
-     * @param fields a list of fields to update if the object is already managed. if null, every fields will be updated
-     * @return the managed Realm object.
-     */
-    public abstract <E extends RealmModel> E copyOrUpdate(Realm realm, E object, boolean update, Map<RealmModel, RealmObjectProxy> cache, List<String> fields);
 
     /**
      * Inserts an unmanaged RealmObject. This is generally faster than {@link #copyOrUpdate(Realm, RealmModel, boolean, Map)}

@@ -37,6 +37,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
@@ -963,28 +964,7 @@ public class Realm extends BaseRealm {
     public <E extends RealmModel> E copyToRealmOrUpdate(E object) {
         checkNotNullObject(object);
         checkHasPrimaryKey(object.getClass());
-        return copyOrUpdate(object, true, new HashMap<RealmModel, RealmObjectProxy>(), null);
-    }
-
-    /**
-     * Updates an existing RealmObject that is identified by the same {@link io.realm.annotations.PrimaryKey} or creates
-     * a new copy if no existing object could be found. This is a deep copy or update i.e., all referenced objects will be
-     * either copied or updated.
-     * <p>
-     * Please note, copying an object will copy all field values. Any unset field in the object and child objects will be
-     * set to their default value if not provided.
-     *
-     * @param object {@link io.realm.RealmObject} to copy or update.
-     * @param fields fields to update.
-     * @return the new or updated RealmObject with all its properties backed by the Realm.
-     * @throws java.lang.IllegalArgumentException if the object is {@code null} or doesn't have a Primary key defined
-     * or it belongs to a Realm instance in a different thread.
-     * @see #copyToRealm(RealmModel)
-     */
-    public <E extends RealmModel> E copyToRealmOrUpdate(E object, List<String> fields) {
-        checkNotNullObject(object);
-        checkHasPrimaryKey(object.getClass());
-        return copyOrUpdate(object, true, new HashMap<RealmModel, RealmObjectProxy>(), fields);
+        return copyOrUpdate(object, true, new HashMap<RealmModel, RealmObjectProxy>());
     }
 
     /**
@@ -1174,35 +1154,7 @@ public class Realm extends BaseRealm {
         ArrayList<E> realmObjects = new ArrayList<E>();
         for (E object : objects) {
             checkNotNullObject(object);
-            realmObjects.add(copyOrUpdate(object, true, cache, null));
-        }
-
-        return realmObjects;
-    }
-
-    /**
-     * Updates a list of existing RealmObjects that is identified by their {@link io.realm.annotations.PrimaryKey} or
-     * creates a new copy if no existing object could be found. This is a deep copy or update i.e., all referenced
-     * objects will be either copied or updated.
-     * <p>
-     * Please note, copying an object will copy all field values. Any unset field in the objects and child objects will be
-     * set to their default value if not provided.
-     *
-     * @param objects a list of objects to update or copy into Realm.
-     * @return a list of all the new or updated RealmObjects.
-     * @throws java.lang.IllegalArgumentException if RealmObject is {@code null} or doesn't have a Primary key defined.
-     * @see #copyToRealm(Iterable)
-     */
-    public <E extends RealmModel> List<E> copyToRealmOrUpdate(Iterable<E> objects, List<String> fields) {
-        if (objects == null) {
-            return new ArrayList<E>(0);
-        }
-
-        Map<RealmModel, RealmObjectProxy> cache = new HashMap<RealmModel, RealmObjectProxy>();
-        ArrayList<E> realmObjects = new ArrayList<E>();
-        for (E object : objects) {
-            checkNotNullObject(object);
-            realmObjects.add(copyOrUpdate(object, true, cache, fields));
+            realmObjects.add(copyOrUpdate(object, true, cache));
         }
 
         return realmObjects;
@@ -1580,13 +1532,7 @@ public class Realm extends BaseRealm {
     @SuppressWarnings("unchecked")
     private <E extends RealmModel> E copyOrUpdate(E object, boolean update, Map<RealmModel, RealmObjectProxy> cache) {
         checkIfValid();
-        return configuration.getSchemaMediator().copyOrUpdate(this, object, update, cache, null);
-    }
-
-    @SuppressWarnings("unchecked")
-    private <E extends RealmModel> E copyOrUpdate(E object, boolean update, Map<RealmModel, RealmObjectProxy> cache, List<String> fields) {
-        checkIfValid();
-        return configuration.getSchemaMediator().copyOrUpdate(this, object, update, cache, fields);
+        return configuration.getSchemaMediator().copyOrUpdate(this, object, update, cache);
     }
 
     private <E extends RealmModel> E createDetachedCopy(E object, int maxDepth, Map<RealmModel, RealmObjectProxy.CacheData<RealmModel>> cache) {
