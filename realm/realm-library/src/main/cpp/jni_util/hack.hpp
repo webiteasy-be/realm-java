@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Realm Inc.
+ * Copyright 2017 Realm Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,15 @@
  * limitations under the License.
  */
 
-#ifndef __SUPPORT_MEM__
-#define __SUPPORT_MEM__
+#ifndef REALM_JNI_UTIL_HACK_HPP
+#define REALM_JNI_UTIL_HACK_HPP
 
-#include <cstdlib> // size_t
+namespace realm {
+namespace jni_util {
 
-/// This function requires that REALM_ENABLE_MEM_USAGE is specified
-/// during building. Otherwise it always returns zero.
-size_t GetMemUsage();
+// Workaround bugs on some devices.
+void hack_init();
 
-#endif //__SUPPORT_MEM__
+}
+}
+#endif // REALM_JNI_UTIL_HACK_HPP

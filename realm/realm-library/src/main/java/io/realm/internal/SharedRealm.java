@@ -24,7 +24,6 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import io.realm.RealmConfiguration;
-import io.realm.RealmSchema;
 import io.realm.internal.android.AndroidCapabilities;
 import io.realm.internal.android.AndroidRealmNotifier;
 
@@ -110,12 +109,13 @@ public final class SharedRealm implements Closeable, NativeObject {
         }
     }
 
+    private final List<WeakReference<PendingRow>> pendingRows = new CopyOnWriteArrayList<>();
+    public final List<WeakReference<Collection>> collections = new CopyOnWriteArrayList<>();
+    public final List<WeakReference<Collection.Iterator>> iterators = new ArrayList<>();
+
     // JNI will only hold a weak global ref to this.
     public final RealmNotifier realmNotifier;
-    public final List<WeakReference<Collection>> collections = new CopyOnWriteArrayList<WeakReference<Collection>>();
     public final Capabilities capabilities;
-    public final List<WeakReference<Collection.Iterator>> iterators =
-            new ArrayList<WeakReference<Collection.Iterator>>();
 
     public static class VersionID implements Comparable<VersionID> {
         public final long version;
@@ -174,9 +174,10 @@ public final class SharedRealm implements Closeable, NativeObject {
         void onSchemaVersionChanged(long currentVersion);
     }
 
-    private long nativePtr;
-    private RealmConfiguration configuration;
-    final Context context;
+    private final RealmConfiguration configuration;
+
+    final private long nativePtr;
+    final NativeContext context;
     private long lastSchemaVersion;
     private final SchemaVersionListener schemaChangeListener;
 
@@ -192,7 +193,7 @@ public final class SharedRealm implements Closeable, NativeObject {
         this.capabilities = capabilities;
         this.realmNotifier = realmNotifier;
         this.schemaChangeListener = schemaVersionListener;
-        context = new Context();
+        context = new NativeContext();
         context.addReference(this);
         this.lastSchemaVersion = schemaVersionListener == null ? -1L : getSchemaVersion();
         nativeSetAutoRefresh(nativePtr, capabilities.canDeliverNotification());
@@ -241,6 +242,7 @@ public final class SharedRealm implements Closeable, NativeObject {
 
     public void beginTransaction() {
         detachIterators();
+        executePendingRowQueries();
         nativeBeginTransaction(nativePtr);
         invokeSchemaChangeListenerIfSchemaChanged();
     }
@@ -317,7 +319,7 @@ public final class SharedRealm implements Closeable, NativeObject {
     }
 
     public boolean isClosed() {
-        return nativePtr == 0 || nativeIsClosed(nativePtr);
+        return nativeIsClosed(nativePtr);
     }
 
     public void writeCopy(File file, byte[] key) {
@@ -343,8 +345,8 @@ public final class SharedRealm implements Closeable, NativeObject {
      * Updates the underlying schema based on the schema description.
      * Calling this method must be done from inside a write transaction.
      */
-    public void updateSchema(RealmSchema schema, long version) {
-        nativeUpdateSchema(nativePtr, schema.getNativePtr(), version);
+    public void updateSchema(long schemaNativePointer, long version) {
+        nativeUpdateSchema(nativePtr, schemaNativePointer, version);
     }
 
     public void setAutoRefresh(boolean enabled) {
@@ -356,8 +358,8 @@ public final class SharedRealm implements Closeable, NativeObject {
         return nativeIsAutoRefresh(nativePtr);
     }
 
-    public boolean requiresMigration(RealmSchema schema) {
-        return nativeRequiresMigration(nativePtr, schema.getNativePtr());
+    public boolean requiresMigration(long schemaNativePointer) {
+        return nativeRequiresMigration(nativePtr, schemaNativePointer);
     }
 
     @Override
@@ -366,12 +368,9 @@ public final class SharedRealm implements Closeable, NativeObject {
             realmNotifier.close();
         }
         synchronized (context) {
-            if (nativePtr != 0) {
-                nativeCloseSharedRealm(nativePtr);
-                // It is OK to clear the nativePtr. It has been saved to the NativeObjectReference when adding to the
-                // context.
-                nativePtr = 0;
-            }
+            nativeCloseSharedRealm(nativePtr);
+            // Don't reset the nativePtr since we still rely on Object Store to check if the given SharedRealm ptr
+            // is closed or not.
         }
     }
 
@@ -403,7 +402,7 @@ public final class SharedRealm implements Closeable, NativeObject {
     // See https://github.com/realm/realm-java/issues/3883 for more information.
     // Should only be called by Iterator's constructor.
     void addIterator(Collection.Iterator iterator) {
-        iterators.add(new WeakReference<Collection.Iterator>(iterator));
+        iterators.add(new WeakReference<>(iterator));
     }
 
     // The detaching should happen before transaction begins.
@@ -426,6 +425,38 @@ public final class SharedRealm implements Closeable, NativeObject {
             }
         }
         iterators.clear();
+    }
+
+    // addPendingRow, removePendingRow and executePendingRow queries are to solve that the listener cannot be added
+    // inside a transaction. For the findFirstAsync(), listener is registered on an Object Store Results first, then move
+    // the listeners to the Object when the query for Results returns. When beginTransaction() called, all listeners'
+    // on the results will be triggered first, that leads to the registration of listeners on the Object which will
+    // throw because of the transaction has already begun. So here we execute all PendingRow queries first before
+    // calling the Object Store begin_transaction to avoid the problem.
+    // Add pending row to the list when it is created. It should be called in the PendingRow constructor.
+    void addPendingRow(PendingRow pendingRow) {
+       pendingRows.add(new WeakReference<PendingRow>(pendingRow));
+    }
+
+    // Remove pending row from the list. It should be called when pending row's query finished.
+    void removePendingRow(PendingRow pendingRow) {
+        for (WeakReference<PendingRow> ref : pendingRows) {
+            PendingRow row = ref.get();
+            if (row == null || row == pendingRow) {
+                pendingRows.remove(ref);
+            }
+        }
+    }
+
+    // Execute all pending row queries.
+    private void executePendingRowQueries() {
+        for (WeakReference<PendingRow> ref : pendingRows) {
+            PendingRow row = ref.get();
+            if (row != null) {
+                row.executeQuery();
+            }
+        }
+        pendingRows.clear();
     }
 
     private static native void nativeInit(String temporaryDirectoryPath);

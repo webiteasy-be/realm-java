@@ -196,12 +196,12 @@ public class CollectionTests {
 
     @Test
     public void clear() {
-        assertEquals(table.size(), 4);
+        assertEquals(4, table.size());
         Collection collection = new Collection(sharedRealm, table.where());
         sharedRealm.beginTransaction();
         collection.clear();
         sharedRealm.commitTransaction();
-        assertEquals(table.size(), 0);
+        assertEquals(0, table.size());
     }
 
     @Test
@@ -217,7 +217,7 @@ public class CollectionTests {
 
         Collection collection = new Collection(sharedRealm, table.where(), sortDescriptor);
         UncheckedRow row = table.getUncheckedRow(0);
-        assertEquals(collection.indexOf(row), 3);
+        assertEquals(3, collection.indexOf(row));
     }
 
     @Test
@@ -225,7 +225,7 @@ public class CollectionTests {
         SortDescriptor sortDescriptor = new SortDescriptor(table, new long[] {2});
 
         Collection collection = new Collection(sharedRealm, table.where(), sortDescriptor);
-        assertEquals(collection.indexOf(0), 3);
+        assertEquals(3, collection.indexOf(0));
     }
 
     @Test
@@ -240,8 +240,8 @@ public class CollectionTests {
         assertEquals(3, collection.size());
         assertEquals(2, collection2.size());
 
-        assertEquals(collection2.getUncheckedRow(0).getLong(2), 3);
-        assertEquals(collection2.getUncheckedRow(1).getLong(2), 1);
+        assertEquals(3, collection2.getUncheckedRow(0).getLong(2));
+        assertEquals(1, collection2.getUncheckedRow(1).getLong(2));
     }
 
     // 1. Create a results and add listener.
@@ -253,12 +253,12 @@ public class CollectionTests {
         Table table = sharedRealm.getTable("test_table");
 
         final Collection collection = new Collection(sharedRealm, table.where());
-        looperThread.keepStrongReference.add(collection);
+        looperThread.keepStrongReference(collection);
         collection.addListener(collection, new RealmChangeListener<Collection>() {
             @Override
             public void onChange(Collection collection1) {
-                assertEquals(collection1, collection);
-                assertEquals(collection1.size(), 4);
+                assertEquals(collection, collection1);
+                assertEquals(4, collection1.size());
                 sharedRealm.close();
                 looperThread.testComplete();
             }
@@ -277,8 +277,8 @@ public class CollectionTests {
         collection.addListener(collection, new RealmChangeListener<Collection>() {
             @Override
             public void onChange(Collection collection1) {
-                assertEquals(collection1, collection);
-                assertEquals(collection1.size(), 4);
+                assertEquals(collection, collection1);
+                assertEquals(4, collection1.size());
                 sharedRealm.close();
                 onChangeCalled.set(true);
             }
@@ -323,7 +323,7 @@ public class CollectionTests {
         collection.addListener(collection, new RealmChangeListener<Collection>() {
             @Override
             public void onChange(Collection element) {
-                assertEquals(latch.getCount(), 1);
+                assertEquals(1, latch.getCount());
                 latch.countDown();
             }
         });
@@ -342,12 +342,12 @@ public class CollectionTests {
         Table table = sharedRealm.getTable("test_table");
 
         final Collection collection = new Collection(sharedRealm, table.where());
-        looperThread.keepStrongReference.add(collection);
+        looperThread.keepStrongReference(collection);
         collection.addListener(collection, new RealmChangeListener<Collection>() {
             @Override
             public void onChange(Collection collection1) {
-                assertEquals(collection1, collection);
-                assertEquals(collection1.size(), 5);
+                assertEquals(collection, collection1);
+                assertEquals(5, collection1.size());
                 sharedRealm.close();
                 looperThread.testComplete();
             }
@@ -363,13 +363,13 @@ public class CollectionTests {
         Table table = sharedRealm.getTable("test_table");
 
         final Collection collection = new Collection(sharedRealm, table.where());
-        looperThread.keepStrongReference.add(collection);
+        looperThread.keepStrongReference(collection);
         assertEquals(collection.size(), 4); // Trigger the query to run.
         collection.addListener(collection, new RealmChangeListener<Collection>() {
             @Override
             public void onChange(Collection collection1) {
-                assertEquals(collection1, collection);
-                assertEquals(collection1.size(), 5);
+                assertEquals(collection, collection1);
+                assertEquals(5, collection1.size());
                 sharedRealm.close();
                 looperThread.testComplete();
             }
@@ -378,7 +378,8 @@ public class CollectionTests {
         addRowAsync();
     }
 
-    // Local commit will trigger the listener first when beginTransaction gets called then again in the next event loop.
+    // Local commit will trigger the listener first when beginTransaction gets called then again when transaction
+    // committed.
     @Test
     @RunTestInLooperThread
     public void addListener_triggeredByLocalCommit() {
@@ -387,24 +388,27 @@ public class CollectionTests {
         final AtomicInteger listenerCounter = new AtomicInteger(0);
 
         final Collection collection = new Collection(sharedRealm, table.where());
-        looperThread.keepStrongReference.add(collection);
+        looperThread.keepStrongReference(collection);
         collection.addListener(collection, new RealmChangeListener<Collection>() {
             @Override
             public void onChange(Collection collection1) {
                 switch (listenerCounter.getAndIncrement()) {
                     case 0:
-                        assertEquals(collection1.size(), 4);
+                        assertEquals(4, collection1.size());
                         break;
                     case 1:
-                        assertEquals(collection1.size(), 5);
+                        assertEquals(5, collection1.size());
                         sharedRealm.close();
-                        looperThread.testComplete();
+                        break;
+                    default:
+                        fail();
                         break;
                 }
             }
         });
         addRow(sharedRealm);
-        assertEquals(collection.size(), 5);
+        assertEquals(2, listenerCounter.get());
+        looperThread.testComplete();
     }
 
     private static class TestIterator extends Collection.Iterator<Integer> {
@@ -464,7 +468,7 @@ public class CollectionTests {
         Table table = sharedRealm.getTable("test_table");
         final Collection collection = new Collection(sharedRealm, table.where());
         final TestIterator iterator = new TestIterator(collection);
-        looperThread.keepStrongReference.add(collection);
+        looperThread.keepStrongReference(collection);
         assertFalse(iterator.isDetached(sharedRealm));
         collection.addListener(collection, new RealmChangeListener<Collection>() {
             @Override
@@ -480,6 +484,14 @@ public class CollectionTests {
         });
 
         addRowAsync();
+    }
+
+    @Test
+    public void collectionIterator_newInstance_throwsWhenSharedRealmIsClosed() {
+        final Collection collection = new Collection(sharedRealm, table.where());
+        sharedRealm.close();
+        thrown.expect(IllegalStateException.class);
+        new TestIterator(collection);
     }
 
     @Test

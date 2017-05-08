@@ -43,9 +43,6 @@ jclass java_lang_string;
 jmethodID java_lang_double_init;
 jclass java_util_date;
 jmethodID java_util_date_init;
-#if REALM_ENABLE_SYNC
-jclass java_syncmanager;
-#endif
 
 void ThrowRealmFileException(JNIEnv* env, const std::string& message, realm::RealmFileException::Kind kind);
 
@@ -108,6 +105,9 @@ void ConvertException(JNIEnv* env, const char* file, int line)
     catch (IncorrectThreadException& e) {
         ss << e.what() << " in " << file << " line " << line;
         ThrowException(env, IllegalState, ss.str());
+    }
+    catch (realm::LogicError e) {
+        ThrowException(env, IllegalState, e.what());
     }
     catch (std::logic_error e) {
         ThrowException(env, IllegalState, e.what());

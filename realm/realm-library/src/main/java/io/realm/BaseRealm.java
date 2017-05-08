@@ -62,16 +62,16 @@ abstract class BaseRealm implements Closeable {
     static final String LISTENER_NOT_ALLOWED_MESSAGE = "Listeners cannot be used on current thread.";
 
 
-    volatile static Context applicationContext;
+    static volatile Context applicationContext;
 
     // Thread pool for all async operations (Query & transaction)
     static final RealmThreadPoolExecutor asyncTaskExecutor = RealmThreadPoolExecutor.newDefaultExecutor();
 
     final long threadId;
-    protected RealmConfiguration configuration;
+    protected final RealmConfiguration configuration;
     protected SharedRealm sharedRealm;
 
-    RealmSchema schema;
+    protected final StandardRealmSchema schema;
 
     protected BaseRealm(RealmConfiguration configuration) {
         this.threadId = Thread.currentThread().getId();
@@ -85,7 +85,7 @@ abstract class BaseRealm implements Closeable {
                                 RealmCache.updateSchemaCache((Realm) BaseRealm.this);
                             }
                         }, true);
-        this.schema = new RealmSchema(this);
+        this.schema = new StandardRealmSchema(this);
     }
 
     /**
@@ -481,8 +481,6 @@ abstract class BaseRealm implements Closeable {
             result = configuration.getSchemaMediator().newInstance(clazz, this, row, schema.getColumnInfo(clazz),
                     false, Collections.<String>emptyList());
         }
-        RealmObjectProxy proxy = (RealmObjectProxy) result;
-        proxy.realmGet$proxyState().setTableVersion$realm();
         return result;
     }
 
@@ -491,8 +489,6 @@ abstract class BaseRealm implements Closeable {
         UncheckedRow row = table.getUncheckedRow(rowIndex);
         E result = configuration.getSchemaMediator().newInstance(clazz, this, row, schema.getColumnInfo(clazz),
                 acceptDefaultValue, excludeFields);
-        RealmObjectProxy proxy = (RealmObjectProxy) result;
-        proxy.realmGet$proxyState().setTableVersion$realm();
         return result;
     }
 
@@ -513,11 +509,6 @@ abstract class BaseRealm implements Closeable {
             result = configuration.getSchemaMediator().newInstance(clazz, this,
                     (rowIndex != Table.NO_MATCH) ? table.getUncheckedRow(rowIndex) : InvalidRow.INSTANCE,
                     schema.getColumnInfo(clazz), false, Collections.<String>emptyList());
-        }
-
-        RealmObjectProxy proxy = (RealmObjectProxy) result;
-        if (rowIndex != Table.NO_MATCH) {
-            proxy.realmGet$proxyState().setTableVersion$realm();
         }
 
         return result;
@@ -651,6 +642,10 @@ abstract class BaseRealm implements Closeable {
         super.finalize();
     }
 
+    SharedRealm getSharedRealm() {
+        return sharedRealm;
+    }
+
     // Internal delegate for migrations.
     protected interface MigrationCallback {
         void migrationComplete();
@@ -672,7 +667,7 @@ abstract class BaseRealm implements Closeable {
             this.excludeFields = excludeFields;
         }
 
-        public BaseRealm getRealm() {
+        BaseRealm getRealm() {
             return realm;
         }
 

@@ -71,11 +71,12 @@ public class SessionTests {
                 .errorHandler(new SyncSession.ErrorHandler() {
                     @Override
                     public void onError(SyncSession session, ObjectServerError error) {
-                        fail("Wrong error " + error.toString());
-                    }
+                        if (error.getErrorCode() != ErrorCode.CLIENT_RESET) {
+                            fail("Wrong error " + error.toString());
+                            return;
+                        }
 
-                    @Override
-                    public void onClientResetRequired(SyncSession session, ClientResetHandler handler) {
+                        final ClientResetRequiredError handler = (ClientResetRequiredError) error;
                         String filePathFromError = handler.getOriginalFile().getAbsolutePath();
                         String filePathFromConfig = session.getConfiguration().getPath();
                         assertEquals(filePathFromError, filePathFromConfig);
@@ -87,7 +88,7 @@ public class SessionTests {
                 .build();
 
         Realm realm = Realm.getInstance(config);
-        looperThread.testRealms.add(realm);
+        looperThread.addTestRealm(realm);
 
         // Trigger error
         SyncManager.simulateClientReset(SyncManager.getSession(config));
@@ -103,11 +104,12 @@ public class SessionTests {
                 .errorHandler(new SyncSession.ErrorHandler() {
                     @Override
                     public void onError(SyncSession session, ObjectServerError error) {
-                        fail("Wrong error " + error.toString());
-                    }
+                        if (error.getErrorCode() != ErrorCode.CLIENT_RESET) {
+                            fail("Wrong error " + error.toString());
+                            return;
+                        }
 
-                    @Override
-                    public void onClientResetRequired(SyncSession session, ClientResetHandler handler) {
+                        final ClientResetRequiredError handler = (ClientResetRequiredError) error;
                         try {
                             handler.executeClientReset();
                             fail("All Realms should be closed before executing Client Reset can be allowed");
@@ -115,7 +117,7 @@ public class SessionTests {
                         }
 
                         // Execute Client Reset
-                        looperThread.testRealms.get(0).close();
+                        looperThread.closeTestRealms();
                         handler.executeClientReset();
 
                         // Validate that files have been moved
@@ -127,10 +129,9 @@ public class SessionTests {
                 .build();
 
         Realm realm = Realm.getInstance(config);
-        looperThread.testRealms.add(realm);
+        looperThread.addTestRealm(realm);
 
         // Trigger error
         SyncManager.simulateClientReset(SyncManager.getSession(config));
     }
-
 }

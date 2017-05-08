@@ -29,6 +29,7 @@ public class PendingRow implements Row {
     private static final String QUERY_EXECUTED_MESSAGE =
             "The query has been executed. This 'PendingRow' is not valid anymore.";
 
+    private SharedRealm sharedRealm;
     private Collection pendingCollection;
     private RealmChangeListener<PendingRow> listener;
     private WeakReference<FrontEnd> frontEndRef;
@@ -36,39 +37,18 @@ public class PendingRow implements Row {
 
     public PendingRow(SharedRealm sharedRealm, TableQuery query, SortDescriptor sortDescriptor,
             final boolean returnCheckedRow) {
+        this.sharedRealm = sharedRealm;
         pendingCollection = new Collection(sharedRealm, query, sortDescriptor, null);
 
         listener = new RealmChangeListener<PendingRow>() {
             @Override
             public void onChange(PendingRow pendingRow) {
-                if (frontEndRef == null) {
-                    throw new IllegalStateException(PROXY_NOT_SET_MESSAGE);
-                }
-                FrontEnd frontEnd = frontEndRef.get();
-                if (frontEnd == null) {
-                    // The front end is GCed.
-                    clearPendingCollection();
-                    return;
-                }
-
-                if (pendingCollection.isValid()) {
-                    // PendingRow will always get the first Row of the query since we only support findFirst.
-                    UncheckedRow uncheckedRow = pendingCollection.firstUncheckedRow();
-                    // If no rows returned by the query, notify the frontend with an invalid row.
-                    if (uncheckedRow != null) {
-                        Row row = returnCheckedRow ? CheckedRow.getFromRow(uncheckedRow) : uncheckedRow;
-                        // Ask the front end to reset the row and stop async query.
-                        frontEnd.onQueryFinished(row);
-                    } else {
-                        frontEnd.onQueryFinished(InvalidRow.INSTANCE);
-                    }
-                }
-
-                clearPendingCollection();
+                notifyFrontEnd();
             }
         };
         pendingCollection.addListener(this, listener);
         this.returnCheckedRow = returnCheckedRow;
+        sharedRealm.addPendingRow(this);
     }
 
     // To set the front end of this PendingRow.
@@ -217,6 +197,11 @@ public class PendingRow implements Row {
     }
 
     @Override
+    public void checkIfAttached() {
+        throw new IllegalStateException(QUERY_NOT_RETURNED_MESSAGE);
+    }
+
+    @Override
     public boolean hasColumn(String fieldName) {
         throw new IllegalStateException(QUERY_NOT_RETURNED_MESSAGE);
     }
@@ -225,22 +210,47 @@ public class PendingRow implements Row {
         pendingCollection.removeListener(this, listener);
         pendingCollection = null;
         listener = null;
+        sharedRealm.removePendingRow(this);
     }
 
-    public Row executeQuery() {
-        if (pendingCollection == null) {
-            throw new IllegalStateException(QUERY_EXECUTED_MESSAGE);
-        }
+    private void notifyFrontEnd() {
         if (frontEndRef == null) {
             throw new IllegalStateException(PROXY_NOT_SET_MESSAGE);
         }
-
-        UncheckedRow uncheckedRow = pendingCollection.firstUncheckedRow();
-        clearPendingCollection();
-
-        if (uncheckedRow == null) {
-            return InvalidRow.INSTANCE;
+        FrontEnd frontEnd = frontEndRef.get();
+        if (frontEnd == null) {
+            // The front end is GCed.
+            clearPendingCollection();
+            return;
         }
-        return returnCheckedRow ? CheckedRow.getFromRow(uncheckedRow) : uncheckedRow;
+
+        if (pendingCollection.isValid()) {
+            // PendingRow will always get the first Row of the query since we only support findFirst.
+            UncheckedRow uncheckedRow = pendingCollection.firstUncheckedRow();
+            // Clear the pending collection immediately in case beginTransaction is called in the listener which will
+            // execute the query again.
+            clearPendingCollection();
+            // If no rows returned by the query, notify the frontend with an invalid row.
+            if (uncheckedRow != null) {
+                Row row = returnCheckedRow ? CheckedRow.getFromRow(uncheckedRow) : uncheckedRow;
+                // Ask the front end to reset the row and stop async query.
+                frontEnd.onQueryFinished(row);
+            } else {
+                // No row matches the query, return a invalid row.
+                frontEnd.onQueryFinished(InvalidRow.INSTANCE);
+            }
+        } else {
+            clearPendingCollection();
+        }
+
+    }
+
+    // Execute the query immediately and call frontend's onQueryFinished().
+    public void executeQuery() {
+        if (pendingCollection == null) {
+            throw new IllegalStateException(QUERY_EXECUTED_MESSAGE);
+        }
+
+        notifyFrontEnd();
     }
 }

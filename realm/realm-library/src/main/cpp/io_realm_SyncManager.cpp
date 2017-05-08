@@ -47,10 +47,10 @@ struct AndroidClientListener : public realm::BindingCallbackThreadObserver {
 } s_client_thread_listener;
 
 struct AndroidSyncLoggerFactory : public realm::SyncLoggerFactory {
-    std::unique_ptr<util::Logger> make_logger(Logger::Level level) override
+    // The level param is ignored. Use the global RealmLog.setLevel() to control all log levels.
+    std::unique_ptr<util::Logger> make_logger(Logger::Level) override
     {
         auto logger = std::make_unique<CoreLoggerBridge>(std::string("REALM_SYNC"));
-        logger->set_level_threshold(level);
         // Cast to std::unique_ptr<util::Logger>
         return std::move(logger);
     }
@@ -97,6 +97,15 @@ JNIEXPORT void JNICALL Java_io_realm_SyncManager_nativeSimulateSyncError(JNIEnv*
         }
         std::error_code code = std::error_code{static_cast<int>(err_code), realm::sync::protocol_error_category()};
         SyncSession::OnlyForTesting::handle_error(*session, {code, std::string(message), to_bool(is_fatal)});
+    }
+    CATCH_STD()
+}
+
+JNIEXPORT void JNICALL Java_io_realm_SyncManager_nativeReconnect(JNIEnv* env, jclass)
+{
+    TR_ENTER()
+    try {
+        SyncManager::shared().reconnect();
     }
     CATCH_STD()
 }

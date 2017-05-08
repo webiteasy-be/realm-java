@@ -93,7 +93,7 @@ public class DynamicRealmTests {
             allTypes.setBoolean(AllTypes.FIELD_BOOLEAN, (i % 3) == 0);
             allTypes.setBlob(AllTypes.FIELD_BINARY, new byte[]{1, 2, 3});
             allTypes.setDate(AllTypes.FIELD_DATE, new Date());
-            allTypes.setDouble(AllTypes.FIELD_DOUBLE, 3.1415D + i);
+            allTypes.setDouble(AllTypes.FIELD_DOUBLE, Math.PI + i);
             allTypes.setFloat(AllTypes.FIELD_FLOAT, 1.234567F + i);
             allTypes.setString(AllTypes.FIELD_STRING, "test data " + i);
             allTypes.setLong(AllTypes.FIELD_LONG, i);
@@ -356,7 +356,7 @@ public class DynamicRealmTests {
                 .between(AllTypes.FIELD_LONG, 4, 9)
                 .findFirstAsync();
         assertFalse(allTypes.isLoaded());
-        looperThread.keepStrongReference.add(allTypes);
+        looperThread.keepStrongReference(allTypes);
         allTypes.addChangeListener(new RealmChangeListener<DynamicRealmObject>() {
             @Override
             public void onChange(DynamicRealmObject object) {
@@ -389,7 +389,7 @@ public class DynamicRealmTests {
                 looperThread.testComplete();
             }
         });
-        looperThread.keepStrongReference.add(allTypes);
+        looperThread.keepStrongReference(allTypes);
     }
 
     @Test
@@ -414,15 +414,15 @@ public class DynamicRealmTests {
                 looperThread.testComplete();
             }
         });
-        looperThread.keepStrongReference.add(allTypes);
+        looperThread.keepStrongReference(allTypes);
     }
 
     // Initializes a Dynamic Realm used by the *Async tests and keeps it ref in the looperThread.
     private DynamicRealm initializeDynamicRealm() {
-        RealmConfiguration defaultConfig = looperThread.realmConfiguration;
+        RealmConfiguration defaultConfig = looperThread.getConfiguration();
         final DynamicRealm dynamicRealm = DynamicRealm.getInstance(defaultConfig);
         populateTestRealm(dynamicRealm, 10);
-        looperThread.keepStrongReference.add(dynamicRealm);
+        looperThread.keepStrongReference(dynamicRealm);
         return dynamicRealm;
     }
 
@@ -531,8 +531,8 @@ public class DynamicRealmTests {
                 signalCallbackDone.run();
             }
         });
-        looperThread.keepStrongReference.add(realmResults1);
-        looperThread.keepStrongReference.add(realmResults2);
+        looperThread.keepStrongReference(realmResults1);
+        looperThread.keepStrongReference(realmResults2);
     }
 
     @Test
@@ -675,7 +675,7 @@ public class DynamicRealmTests {
         dynamicRealm.commitTransaction();
 
         thrown.expect(IllegalArgumentException.class);
-        thrown.expectMessage("Field 'nonExisting' does not exist.");
+        thrown.expectMessage("Invalid query: field 'nonExisting' does not exist in table 'NoField'.");
         dynamicRealm.where(className).equalTo("nonExisting", 1);
     }
 }

@@ -38,12 +38,17 @@ import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
+import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
@@ -56,6 +61,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -116,6 +122,9 @@ import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
 
 @RunWith(AndroidJUnit4.class)
 public class RealmTests {
@@ -127,6 +136,8 @@ public class RealmTests {
     public final RunInLooperThread looperThread = new RunInLooperThread();
     @Rule
     public final TestRealmConfigurationFactory configFactory = new TestRealmConfigurationFactory();
+    @Rule
+    public final TemporaryFolder tmpFolder = new TemporaryFolder();
     @Rule
     public final ExpectedException thrown = ExpectedException.none();
 
@@ -168,7 +179,7 @@ public class RealmTests {
             allTypes.setColumnBoolean((i % 3) == 0);
             allTypes.setColumnBinary(new byte[]{1, 2, 3});
             allTypes.setColumnDate(new Date());
-            allTypes.setColumnDouble(3.1415);
+            allTypes.setColumnDouble(Math.PI);
             allTypes.setColumnFloat(1.234567f + i);
 
             allTypes.setColumnString("test data " + i);
@@ -370,13 +381,13 @@ public class RealmTests {
         }
 
         try {
-            realm.where(AllTypes.class).equalTo("invalidcolumnname", 3.1415d).findAll();
+            realm.where(AllTypes.class).equalTo("invalidcolumnname", Math.PI).findAll();
             fail("Invalid field name");
         } catch (Exception ignored) {
         }
 
         try {
-            realm.where(AllTypes.class).equalTo("invalidcolumnname", 3.1415f).findAll();
+            realm.where(AllTypes.class).equalTo("invalidcolumnname", Math.PI).findAll();
             fail("Invalid field name");
         } catch (Exception ignored) {
         }
@@ -455,7 +466,7 @@ public class RealmTests {
 
         realm.beginTransaction();
         AllTypes allTypes = realm.createObject(AllTypes.class);
-        allTypes.setColumnFloat(3.1415f);
+        allTypes.setColumnFloat(3.14F);
         allTypes.setColumnString("a unique string");
         realm.commitTransaction();
 
@@ -464,7 +475,7 @@ public class RealmTests {
 
         resultList = realm.where(AllTypes.class).equalTo(AllTypes.FIELD_STRING, "a unique string").findAll();
         assertEquals(1, resultList.size());
-        resultList = realm.where(AllTypes.class).equalTo(AllTypes.FIELD_FLOAT, 3.1415f).findAll();
+        resultList = realm.where(AllTypes.class).equalTo(AllTypes.FIELD_FLOAT, 3.14F).findAll();
         assertEquals(1, resultList.size());
     }
 
@@ -1974,10 +1985,7 @@ public class RealmTests {
             public void run() {
                 Realm realm = Realm.getInstance(configuration);
                 bgThreadReadyLatch.countDown();
-                try {
-                    readyToCloseLatch.await();
-                } catch (InterruptedException ignored) {
-                }
+                TestHelper.awaitOrFail(readyToCloseLatch);
                 realm.close();
                 closedLatch.countDown();
             }
@@ -1995,7 +2003,7 @@ public class RealmTests {
         readyToCloseLatch.countDown();
 
         realm.close();
-        closedLatch.await();
+        TestHelper.awaitOrFail(closedLatch);
         // Now we get log files back!
         assertTrue(tempDirRenamed.renameTo(tempDir));
 
@@ -2582,7 +2590,7 @@ public class RealmTests {
         thatThread.start();
 
         // Timeout should never happen.
-        latch.await();
+        TestHelper.awaitOrFail(latch);
         if (threadAssertionError[0] != null) {
             throw threadAssertionError[0];
         }
@@ -2620,7 +2628,7 @@ public class RealmTests {
         thatThread.start();
 
         // Timeout should never happen.
-        latch.await();
+        TestHelper.awaitOrFail(latch);
         if (threadAssertionError[0] != null) {
             throw threadAssertionError[0];
         }
@@ -2696,7 +2704,7 @@ public class RealmTests {
             @Override
             public void run() {
                 try {
-                    startLatch.await();
+                    startLatch.await(TestHelper.STANDARD_WAIT_SECS, TimeUnit.SECONDS);
                 } catch (InterruptedException e) {
                     exception.add(e);
                     return;
@@ -2725,7 +2733,7 @@ public class RealmTests {
             realm = null;
         }
 
-        endLatch.await();
+        TestHelper.awaitOrFail(endLatch);
 
         if (!exception.isEmpty()) {
             throw exception.get(0);
@@ -2752,7 +2760,7 @@ public class RealmTests {
                 Realm realm = Realm.getInstance(realmConfig);
                 realmOpenedInBgLatch.countDown();
                 try {
-                    realmClosedInFgLatch.await();
+                    realmClosedInFgLatch.await(TestHelper.STANDARD_WAIT_SECS, TimeUnit.SECONDS);
                 } catch (InterruptedException e) {
                     exception.add(e);
                     realm.close();
@@ -2763,7 +2771,7 @@ public class RealmTests {
                 realm.beginTransaction();
                 transBeganInBgLatch.countDown();
                 try {
-                    fgFinishedLatch.await();
+                    fgFinishedLatch.await(TestHelper.STANDARD_WAIT_SECS, TimeUnit.SECONDS);
                 } catch (InterruptedException e) {
                     exception.add(e);
                 }
@@ -2775,16 +2783,16 @@ public class RealmTests {
         });
         thread.start();
 
-        realmOpenedInBgLatch.await();
+        TestHelper.awaitOrFail(realmOpenedInBgLatch);
         // Step 3: Closes all realm instances in foreground thread.
         realm.close();
         realmClosedInFgLatch.countDown();
-        transBeganInBgLatch.await();
+        TestHelper.awaitOrFail(transBeganInBgLatch);
 
         // Step 5: Gets a new Realm instance in foreground.
         realm = Realm.getInstance(realmConfig);
         fgFinishedLatch.countDown();
-        bgFinishedLatch.await();
+        TestHelper.awaitOrFail(bgFinishedLatch);
 
         if (!exception.isEmpty()) {
             throw exception.get(0);
@@ -3074,7 +3082,7 @@ public class RealmTests {
     @Test
     @RunTestInLooperThread
     public void closeRealmInChangeListenerWhenThereIsListenerOnEmptyObject() {
-        final Realm realm = looperThread.realm;
+        final Realm realm = looperThread.getRealm();
         final RealmChangeListener<AllTypes> dummyListener = new RealmChangeListener<AllTypes>() {
             @Override
             public void onChange(AllTypes object) {
@@ -3115,7 +3123,7 @@ public class RealmTests {
     @Test
     @RunTestInLooperThread
     public void closeRealmInChangeListenerWhenThereIsListenerOnObject() {
-        final Realm realm = looperThread.realm;
+        final Realm realm = looperThread.getRealm();
         final RealmChangeListener<AllTypes> dummyListener = new RealmChangeListener<AllTypes>() {
             @Override
             public void onChange(AllTypes object) {
@@ -3160,7 +3168,7 @@ public class RealmTests {
     @Test
     @RunTestInLooperThread
     public void closeRealmInChangeListenerWhenThereIsListenerOnResults() {
-        final Realm realm = looperThread.realm;
+        final Realm realm = looperThread.getRealm();
         final RealmChangeListener<RealmResults<AllTypes>> dummyListener = new RealmChangeListener<RealmResults<AllTypes>>() {
             @Override
             public void onChange(RealmResults<AllTypes> object) {
@@ -3199,7 +3207,7 @@ public class RealmTests {
     @Test
     @RunTestInLooperThread
     public void addChangeListener_throwOnAddingNullListenerFromLooperThread() {
-        final Realm realm = looperThread.realm;
+        final Realm realm = looperThread.getRealm();
 
         try {
             realm.addChangeListener(null);
@@ -3232,7 +3240,7 @@ public class RealmTests {
     @Test
     @RunTestInLooperThread
     public void removeChangeListener_throwOnRemovingNullListenerFromLooperThread() {
-        final Realm realm = looperThread.realm;
+        final Realm realm = looperThread.getRealm();
 
         try {
             realm.removeChangeListener(null);
@@ -3690,34 +3698,34 @@ public class RealmTests {
 
     @Test
     public void schemaIndexCacheIsUpdatedAfterSchemaChange() {
-        final CatRealmProxy.CatColumnInfo catColumnInfo;
-        catColumnInfo = (CatRealmProxy.CatColumnInfo) realm.schema.columnIndices.getColumnInfo(Cat.class);
-
-        final long nameIndex = catColumnInfo.nameIndex;
         final AtomicLong nameIndexNew = new AtomicLong(-1L);
 
-        // Changes column index of "name".
+        // get the pre-update index for the "name" column.
+        CatRealmProxy.CatColumnInfo catColumnInfo
+                = (CatRealmProxy.CatColumnInfo) realm.schema.getColumnInfo(Cat.class);
+        final long nameIndex = catColumnInfo.nameIndex;
+
+        // Change the index of the column "name".
         realm.executeTransaction(new Realm.Transaction() {
             @Override
             public void execute(Realm realm) {
                 final Table catTable = realm.getSchema().getTable(Cat.CLASS_NAME);
                 final long nameIndex = catTable.getColumnIndex(Cat.FIELD_NAME);
                 catTable.removeColumn(nameIndex);
-                final long newIndex = catTable.addColumn(RealmFieldType.STRING,
-                        Cat.FIELD_NAME, true);
-
+                final long newIndex = catTable.addColumn(RealmFieldType.STRING, Cat.FIELD_NAME, true);
                 realm.setVersion(realm.getConfiguration().getSchemaVersion() + 1);
-
                 nameIndexNew.set(newIndex);
             }
         });
+
         // We need to update index cache if the schema version was changed in the same thread.
         realm.sharedRealm.invokeSchemaChangeListenerIfSchemaChanged();
 
-        // Checks if the index was changed.
+        // Verify that the index has changed.
         assertNotEquals(nameIndex, nameIndexNew);
 
-        // Checks if index in the ColumnInfo is updated.
+        // Verify that the index in the ColumnInfo has been updated.
+        catColumnInfo = (CatRealmProxy.CatColumnInfo) realm.schema.getColumnInfo(Cat.class);
         assertEquals(nameIndexNew.get(), catColumnInfo.nameIndex);
         assertEquals(nameIndexNew.get(), (long) catColumnInfo.getIndicesMap().get(Cat.FIELD_NAME));
 
@@ -3828,5 +3836,38 @@ public class RealmTests {
         // Tests if it works when the namedPipeDir and the named pipe files already exist.
         realmOnExternalStorage = Realm.getInstance(config);
         realmOnExternalStorage.close();
+    }
+
+    // Verify that the logic for waiting for the users file dir to be come available isn't totally broken
+    // This is pretty hard to test, so forced to break encapsulation in this case.
+    @Test
+    public void init_waitForFilesDir() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException, IOException {
+        java.lang.reflect.Method m = Realm.class.getDeclaredMethod("checkFilesDirAvailable", Context.class);
+        m.setAccessible(true);
+
+        // A) Check it fails if getFilesDir is never created
+        Context mockContext = mock(Context.class);
+        when(mockContext.getFilesDir()).thenReturn(null);
+
+        try {
+            m.invoke(null, mockContext);
+            fail();
+        } catch (InvocationTargetException e) {
+            assertEquals(IllegalStateException.class, e.getCause().getClass());
+        }
+
+        // B) Check we return if the filesDir becomes available after a while
+        mockContext = mock(Context.class);
+        when(mockContext.getFilesDir()).then(new Answer<File>() {
+            int calls = 0;
+            File userFolder = tmpFolder.newFolder();
+            @Override
+            public File answer(InvocationOnMock invocationOnMock) throws Throwable {
+                calls++;
+                return (calls > 5) ? userFolder : null; // Start returning the correct folder after 5 attempts
+            }
+        });
+
+        assertNull(m.invoke(null, mockContext));
     }
 }

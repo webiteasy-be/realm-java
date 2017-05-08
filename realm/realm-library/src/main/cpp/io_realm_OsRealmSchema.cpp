@@ -15,7 +15,7 @@
  */
 
 #include <jni.h>
-#include "io_realm_RealmSchema.h"
+#include "io_realm_OsRealmSchema.h"
 
 #include <object-store/src/schema.hpp>
 #include <object-store/src/object_schema.hpp>
@@ -25,7 +25,7 @@
 using namespace realm;
 
 
-JNIEXPORT jlong JNICALL Java_io_realm_RealmSchema_nativeCreateFromList(JNIEnv* env, jclass,
+JNIEXPORT jlong JNICALL Java_io_realm_OsRealmSchema_nativeCreateFromList(JNIEnv* env, jclass,
                                                                        jlongArray objectSchemaPtrs_)
 {
     TR_ENTER()
@@ -33,8 +33,7 @@ JNIEXPORT jlong JNICALL Java_io_realm_RealmSchema_nativeCreateFromList(JNIEnv* e
         std::vector<ObjectSchema> object_schemas;
         JniLongArray array(env, objectSchemaPtrs_);
         for (jsize i = 0; i < array.len(); ++i) {
-            ObjectSchema object_schema = *reinterpret_cast<ObjectSchema*>(array[i]);
-            object_schemas.push_back(std::move(object_schema));
+            object_schemas.push_back(*reinterpret_cast<ObjectSchema*>(array[i]));
         }
         auto* schema = new Schema(object_schemas);
         return reinterpret_cast<jlong>(schema);
@@ -43,33 +42,9 @@ JNIEXPORT jlong JNICALL Java_io_realm_RealmSchema_nativeCreateFromList(JNIEnv* e
     return 0;
 }
 
-JNIEXPORT void JNICALL Java_io_realm_RealmSchema_nativeClose(JNIEnv*, jclass, jlong nativePtr)
+JNIEXPORT void JNICALL Java_io_realm_OsRealmSchema_nativeClose(JNIEnv*, jclass, jlong nativePtr)
 {
     TR_ENTER_PTR(nativePtr)
     Schema* schema = reinterpret_cast<Schema*>(nativePtr);
     delete schema;
-}
-
-JNIEXPORT jlongArray JNICALL Java_io_realm_RealmSchema_nativeGetAll(JNIEnv* env, jclass, jlong nativePtr)
-{
-    TR_ENTER_PTR(nativePtr)
-    try {
-        Schema* schema = reinterpret_cast<Schema*>(nativePtr);
-        size_t size = schema->size();
-        jlongArray native_ptr_array = env->NewLongArray(static_cast<jsize>(size));
-        jlong* tmp = new jlong[size];
-        auto it = schema->begin();
-        size_t index = 0;
-        while (it != schema->end()) {
-            auto object_schema = *it;
-            tmp[index] = reinterpret_cast<jlong>(new ObjectSchema(std::move(object_schema)));
-            ++index;
-            ++it;
-        }
-        env->SetLongArrayRegion(native_ptr_array, 0, static_cast<jsize>(size), tmp);
-        delete tmp;
-        return native_ptr_array;
-    }
-    CATCH_STD()
-    return nullptr;
 }
