@@ -26,7 +26,7 @@ import io.realm.Sort
 import io.realm.examples.kotlin.model.Cat
 import io.realm.examples.kotlin.model.Dog
 import io.realm.examples.kotlin.model.Person
-import org.jetbrains.anko.async
+import org.jetbrains.anko.doAsync
 import org.jetbrains.anko.uiThread
 import kotlin.properties.Delegates
 
@@ -42,7 +42,7 @@ class KotlinExampleActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_realm_basic_example)
-        rootLayout = findViewById(R.id.container) as LinearLayout
+        rootLayout = findViewById(R.id.container)
         rootLayout.removeAllViews()
 
         // These operations are small enough that
@@ -63,11 +63,10 @@ class KotlinExampleActivity : Activity() {
         basicLinkQuery(realm)
 
         // More complex operations can be executed on another thread, for example using
-        // Anko's async extension method.
-        async {
+        // Anko's doAsync extension method.
+        doAsync {
             var info = complexReadWrite()
             info += complexQuery()
-
             uiThread {
                 showStatus(info)
             }
@@ -98,7 +97,7 @@ class KotlinExampleActivity : Activity() {
         }
 
         // Find the first person (no query conditions) and read a field
-        val person = realm.where(Person::class.java).findFirst()
+        val person = realm.where(Person::class.java).findFirst()!!
         showStatus(person.name + ": " + person.age)
 
         // Update person in a transaction
@@ -113,7 +112,7 @@ class KotlinExampleActivity : Activity() {
         showStatus("\nPerforming basic Query operation...")
         showStatus("Number of persons: ${realm.where(Person::class.java).count()}")
 
-        val results = realm.where(Person::class.java).equalTo("age", 99).findAll()
+        val results = realm.where(Person::class.java).equalTo("age", 99.toInt()).findAll()
 
         showStatus("Size of result set: " + results.size)
     }
@@ -175,7 +174,7 @@ class KotlinExampleActivity : Activity() {
 
             // Sorting
             val sortedPersons = realm.where(Person::class.java).findAllSorted("age", Sort.DESCENDING)
-            status += "\nSorting ${sortedPersons.last().name} == ${realm.where(Person::class.java).findAll().first().name}"
+            status += "\nSorting ${sortedPersons.last()?.name} == ${realm.where(Person::class.java).findAll().first()?.name}"
 
         } finally {
             realm.close()

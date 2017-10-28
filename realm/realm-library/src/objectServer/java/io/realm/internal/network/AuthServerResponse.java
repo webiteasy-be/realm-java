@@ -24,7 +24,7 @@ import io.realm.ObjectServerError;
 /**
  * Base class for all response types from the Realm Authentication Server.
  */
-public class AuthServerResponse {
+public abstract class AuthServerResponse {
 
     protected ObjectServerError error;
 
@@ -63,7 +63,14 @@ public class AuthServerResponse {
             JSONObject obj = new JSONObject(response);
             String title = obj.optString("title", null);
             String hint = obj.optString("hint", null);
-            ErrorCode errorCode = ErrorCode.fromInt(obj.optInt("code", -1));
+            ErrorCode errorCode;
+            if (obj.has("code")) {
+                errorCode = ErrorCode.fromInt(obj.getInt("code"));
+            } else if (obj.has("status")) {
+                errorCode = ErrorCode.fromInt(obj.getInt("status"));
+            } else {
+                errorCode = ErrorCode.UNKNOWN;
+            }
             return new ObjectServerError(errorCode, title, hint);
         } catch (JSONException e) {
             return new ObjectServerError(ErrorCode.JSON_EXCEPTION, "Server failed with " +

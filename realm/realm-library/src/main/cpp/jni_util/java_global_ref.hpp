@@ -45,19 +45,18 @@ public:
     ~JavaGlobalRef();
 
     JavaGlobalRef& operator=(JavaGlobalRef&& rhs);
+    JavaGlobalRef& operator=(JavaGlobalRef& rhs) = delete;
+    JavaGlobalRef(JavaGlobalRef&);
 
     inline operator bool() const noexcept
     {
         return m_ref != nullptr;
     }
 
-    inline jobject get() noexcept
+    inline jobject get() const noexcept
     {
         return m_ref;
     }
-
-    // Not implemented for now.
-    JavaGlobalRef(JavaGlobalRef&) = delete;
 
 private:
     jobject m_ref;

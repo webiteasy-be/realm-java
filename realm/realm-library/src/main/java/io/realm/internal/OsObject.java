@@ -16,16 +16,22 @@
 
 package io.realm.internal;
 
+import javax.annotation.Nullable;
+
 import io.realm.ObjectChangeSet;
+import io.realm.RealmFieldType;
 import io.realm.RealmModel;
 import io.realm.RealmObjectChangeListener;
+import io.realm.exceptions.RealmException;
 
 
 /**
- * Java wrapper for Object Store's {@code Object} class. Currently it is only used for object notifications.
+ * Java wrapper for Object Store's {@code Object} class.
  */
-@KeepMember
+@Keep
 public class OsObject implements NativeObject {
+
+    private static final String OBJECT_ID_COLUMN_NAME = nativeGetObjectIdColumName();
 
     private static class OsObjectChangeSet implements ObjectChangeSet {
         final String[] changedFields;
@@ -63,7 +69,7 @@ public class OsObject implements NativeObject {
             super(observer, listener);
         }
 
-        public void onChange(T observer, ObjectChangeSet changeSet) {
+        public void onChange(T observer, @Nullable ObjectChangeSet changeSet) {
             listener.onChange(observer, changeSet);
         }
     }
@@ -142,9 +148,107 @@ public class OsObject implements NativeObject {
         }
     }
 
+    // TODO: consider to return a OsObject instead when integrating with Object Store's object accessor.
+    /**
+     * Create an object in the given table which doesn't have a primary key column defined.
+     *
+     * @param table the table where the object is created. This table must be atached to {@link SharedRealm}.
+     * @return a newly created {@code UncheckedRow}.
+     */
+    public static UncheckedRow create(Table table) {
+        final SharedRealm sharedRealm = table.getSharedRealm();
+        return new UncheckedRow(sharedRealm.context, table,
+                nativeCreateNewObject(sharedRealm.getNativePtr(), table.getNativePtr()));
+    }
+
+    /**
+     * Create a row in the given table which doesn't have a primary key column defined.
+     * This is used for the fast bulk insertion.
+     *
+     * @param table the table where the object is created.
+     * @return a newly created row's index.
+     */
+    public static long createRow(Table table) {
+        final SharedRealm sharedRealm = table.getSharedRealm();
+        return nativeCreateRow(sharedRealm.getNativePtr(), table.getNativePtr());
+    }
+
+    private static long getAndVerifyPrimaryKeyColumnIndex(Table table) {
+        String pkField = OsObjectStore.getPrimaryKeyForObject(table.getSharedRealm(), table.getClassName());
+        if (pkField == null) {
+            throw new IllegalStateException(table.getName() + " has no primary key defined.");
+        }
+        return table.getColumnIndex(pkField);
+    }
+
+    // TODO: consider to return a OsObject instead when integrating with Object Store's object accessor.
+    /**
+     * Create an object in the given table which has a primary key column defined, and set the primary key with given
+     * value.
+     *
+     * @param table the table where the object is created. This table must be atached to {@link SharedRealm}.
+     * @return a newly created {@code UncheckedRow}.
+     */
+    public static UncheckedRow createWithPrimaryKey(Table table, @Nullable Object primaryKeyValue) {
+        long primaryKeyColumnIndex = getAndVerifyPrimaryKeyColumnIndex(table);
+        RealmFieldType type = table.getColumnType(primaryKeyColumnIndex);
+        final SharedRealm sharedRealm = table.getSharedRealm();
+
+        if (type == RealmFieldType.STRING) {
+            if (primaryKeyValue != null && !(primaryKeyValue instanceof String)) {
+                throw new IllegalArgumentException("Primary key value is not a String: " + primaryKeyValue);
+            }
+            return new UncheckedRow(sharedRealm.context, table,
+                    nativeCreateNewObjectWithStringPrimaryKey(sharedRealm.getNativePtr(), table.getNativePtr(),
+                            primaryKeyColumnIndex, (String) primaryKeyValue));
+
+        } else if (type == RealmFieldType.INTEGER) {
+            long value = primaryKeyValue == null ? 0 : Long.parseLong(primaryKeyValue.toString());
+            return new UncheckedRow(sharedRealm.context, table,
+                    nativeCreateNewObjectWithLongPrimaryKey(sharedRealm.getNativePtr(), table.getNativePtr(),
+                            primaryKeyColumnIndex, value, primaryKeyValue == null));
+        } else {
+            throw new RealmException("Cannot check for duplicate rows for unsupported primary key type: " + type);
+        }
+    }
+
+    /**
+     * Create an object in the given table which has a primary key column defined, and set the primary key with given
+     * value.
+     * This is used for the fast bulk insertion.
+     *
+     * @param table the table where the object is created.
+     * @param primaryKeyColumnIndex the column index of primary key field.
+     * @param primaryKeyValue the primary key value.
+     * @return a newly created {@code UncheckedRow}.
+     */
+    // FIXME: Proxy could just pass the pk index here which is much faster.
+    public static long createRowWithPrimaryKey(Table table, long primaryKeyColumnIndex, Object primaryKeyValue) {
+        RealmFieldType type = table.getColumnType(primaryKeyColumnIndex);
+        final SharedRealm sharedRealm = table.getSharedRealm();
+
+        if (type == RealmFieldType.STRING) {
+            if (primaryKeyValue != null && !(primaryKeyValue instanceof String)) {
+                throw new IllegalArgumentException("Primary key value is not a String: " + primaryKeyValue);
+            }
+            return nativeCreateRowWithStringPrimaryKey(sharedRealm.getNativePtr(), table.getNativePtr(),
+                    primaryKeyColumnIndex, (String) primaryKeyValue);
+
+        } else if (type == RealmFieldType.INTEGER) {
+            long value = primaryKeyValue == null ? 0 : Long.parseLong(primaryKeyValue.toString());
+            return nativeCreateRowWithLongPrimaryKey(sharedRealm.getNativePtr(), table.getNativePtr(),
+                    primaryKeyColumnIndex, value, primaryKeyValue == null);
+        } else {
+            throw new RealmException("Cannot check for duplicate rows for unsupported primary key type: " + type);
+        }
+    }
+
+    public static boolean isObjectIdColumn(String columnName) {
+        return OBJECT_ID_COLUMN_NAME.equals(columnName);
+    }
+
     // Called by JNI
     @SuppressWarnings("unused")
-    @KeepMember
     private void notifyChangeListeners(String[] changedFields) {
         observerPairs.foreach(new Callback(changedFields));
     }
@@ -156,4 +260,32 @@ public class OsObject implements NativeObject {
     private native void nativeStartListening(long nativePtr);
 
     private native void nativeStopListening(long nativePtr);
+
+    private static native long nativeCreateNewObject(long sharedRealmPtr, long tablePtr);
+
+    private static native long nativeCreateRow(long sharedRealmPtr, long tablePtr);
+
+
+    // Return a pointer to newly created Row. We may need to return a OsObject pointer in the future.
+    private static native long nativeCreateNewObjectWithLongPrimaryKey(long sharedRealmPtr,
+                                                                       long tablePtr, long pk_column_index,
+                                                                       long primaryKeyValue, boolean isNullValue);
+
+    // Return a index of newly created Row.
+    private static native long nativeCreateRowWithLongPrimaryKey(long sharedRealmPtr,
+                                                                 long tablePtr, long pk_column_index,
+                                                                 long primaryKeyValue, boolean isNullValue);
+
+    // Return a pointer to newly created Row. We may need to return a OsObject pointer in the future.
+    private static native long nativeCreateNewObjectWithStringPrimaryKey(long sharedRealmPtr,
+                                                                         long tablePtr, long pk_column_index,
+                                                                         @Nullable String primaryKeyValue);
+
+    // Return a index of newly created Row.
+    private static native long nativeCreateRowWithStringPrimaryKey(long sharedRealmPtr,
+                                                                   long tablePtr, long pk_column_index,
+                                                                   String primaryKeyValue);
+
+    // Return sync::object_id_column_name
+    private static native String nativeGetObjectIdColumName();
 }

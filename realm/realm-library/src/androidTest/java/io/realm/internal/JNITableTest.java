@@ -19,6 +19,7 @@ package io.realm.internal;
 import android.support.test.runner.AndroidJUnit4;
 import android.util.Pair;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -29,6 +30,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicLong;
 
 import io.realm.Realm;
 import io.realm.RealmConfiguration;
@@ -43,37 +45,52 @@ import static junit.framework.Assert.assertNull;
 import static junit.framework.Assert.assertTrue;
 import static junit.framework.Assert.fail;
 
+
 @RunWith(AndroidJUnit4.class)
 public class JNITableTest {
     @Rule
     public final TestRealmConfigurationFactory configFactory = new TestRealmConfigurationFactory();
 
-    private Table t;
+    @SuppressWarnings("FieldCanBeLocal")
+    private RealmConfiguration config;
+    private SharedRealm sharedRealm;
 
     @Before
     public void setUp() {
-        t = new Table();
+        config = configFactory.createConfiguration();
+        sharedRealm = SharedRealm.getInstance(config);
+    }
+
+    @After
+    public void tearDown() {
+        if (sharedRealm != null)  {
+            sharedRealm.close();
+        }
     }
 
     @Test
     public void tableToString() {
-        Table t = new Table();
+        Table t = TestHelper.createTable(sharedRealm, "temp", new TestHelper.AdditionalTableSetup() {
+            @Override
+            public void execute(Table t) {
+                t.addColumn(RealmFieldType.STRING, "stringCol");
+                t.addColumn(RealmFieldType.INTEGER, "intCol");
+                t.addColumn(RealmFieldType.BOOLEAN, "boolCol");
 
-        t.addColumn(RealmFieldType.STRING, "stringCol");
-        t.addColumn(RealmFieldType.INTEGER, "intCol");
-        t.addColumn(RealmFieldType.BOOLEAN, "boolCol");
+                TestHelper.addRowWithValues(t, "s1", 1, true);
+                TestHelper.addRowWithValues(t, "s2", 2, false);
+            }
+        });
 
-        t.add("s1", 1, true);
-        t.add("s2", 2, false);
-
-        String expected = "The Table contains 3 columns: stringCol, intCol, boolCol. And 2 rows.";
+        String expected = "The Table temp contains 3 columns: stringCol, intCol, boolCol. And 2 rows.";
         assertEquals(expected, t.toString());
     }
 
     @Test
-    public void rowOperationsOnZeroRow(){
+    public void rowOperationsOnZeroRow() {
+        Table t = TestHelper.createTable(sharedRealm, "temp");
 
-        Table t = new Table();
+        sharedRealm.beginTransaction();
         // Removes rows without columns.
         try { t.moveLastOver(0);  fail("No rows in table"); } catch (ArrayIndexOutOfBoundsException ignored) {}
         try { t.moveLastOver(10); fail("No rows in table"); } catch (ArrayIndexOutOfBoundsException ignored) {}
@@ -82,46 +99,58 @@ public class JNITableTest {
         t.addColumn(RealmFieldType.STRING, "");
         try { t.moveLastOver(0);  fail("No rows in table"); } catch (ArrayIndexOutOfBoundsException ignored) {}
         try { t.moveLastOver(10); fail("No rows in table"); } catch (ArrayIndexOutOfBoundsException ignored) {}
-
+        sharedRealm.commitTransaction();
     }
 
     @Test
     public void zeroColOperations() {
-        Table tableZeroCols = new Table();
+        Table tableZeroCols = TestHelper.createTable(sharedRealm, "temp");
 
-        // Adds rows.
-        try { tableZeroCols.add("val");         fail("No columns in table"); } catch (IndexOutOfBoundsException ignored) {}
-        try { tableZeroCols.addEmptyRow();      fail("No columns in table"); } catch (IndexOutOfBoundsException ignored) {}
-        try { tableZeroCols.addEmptyRows(10);   fail("No columns in table"); } catch (IndexOutOfBoundsException ignored) {}
-
-
+        sharedRealm.beginTransaction();
         // Col operations
-        try { tableZeroCols.removeColumn(0);                fail("No columns in table"); } catch (ArrayIndexOutOfBoundsException ignored) {}
-        try { tableZeroCols.renameColumn(0, "newName");     fail("No columns in table"); } catch (ArrayIndexOutOfBoundsException ignored) {}
-        try { tableZeroCols.removeColumn(10);               fail("No columns in table"); } catch (ArrayIndexOutOfBoundsException ignored) {}
-        try { tableZeroCols.renameColumn(10, "newName");    fail("No columns in table"); } catch (ArrayIndexOutOfBoundsException ignored) {}
+        try {
+            tableZeroCols.removeColumn(0);
+            fail("No columns in table");
+        } catch (ArrayIndexOutOfBoundsException ignored) {}
+        try {
+            tableZeroCols.renameColumn(0, "newName");
+            fail("No columns in table");
+        } catch (ArrayIndexOutOfBoundsException ignored) {}
+        try {
+            tableZeroCols.removeColumn(10);
+            fail("No columns in table");
+        } catch (ArrayIndexOutOfBoundsException ignored) {}
+        try {
+            tableZeroCols.renameColumn(10, "newName");
+            fail("No columns in table");
+        } catch (ArrayIndexOutOfBoundsException ignored) {}
+        sharedRealm.commitTransaction();
     }
 
     @Test
     public void findFirstNonExisting() {
-        Table t = TestHelper.getTableWithAllColumnTypes();
-        t.add(new byte[]{1, 2, 3}, true, new Date(1384423149761L), 4.5d, 5.7f, 100, "string");
+        Table t = TestHelper.createTableWithAllColumnTypes(sharedRealm);
+        sharedRealm.beginTransaction();
+        TestHelper.addRowWithValues(t, new byte[] {1, 2, 3}, true, new Date(1384423149761L), 4.5D, 5.7F, 100, "string");
+        sharedRealm.commitTransaction();
 
         assertEquals(-1, t.findFirstBoolean(1, false));
-        // FIXME: reenable when core implements find_first_timestamp(): assertEquals(-1, t.findFirstDate(2, new Date(138442314986l)));
-        assertEquals(-1, t.findFirstDouble(3, 1.0d));
-        assertEquals(-1, t.findFirstFloat(4, 1.0f));
+        assertEquals(-1, t.findFirstDate(2, new Date(138442314986L)));
+        assertEquals(-1, t.findFirstDouble(3, 1.0D));
+        assertEquals(-1, t.findFirstFloat(4, 1.0F));
         assertEquals(-1, t.findFirstLong(5, 50));
     }
 
     @Test
     public void findFirst() {
         final int TEST_SIZE = 10;
-        Table t = TestHelper.getTableWithAllColumnTypes();
+        Table t = TestHelper.createTableWithAllColumnTypes(sharedRealm);
+        sharedRealm.beginTransaction();
         for (int i = 0; i < TEST_SIZE; i++) {
-            t.add(new byte[]{1,2,3}, true, new Date(i), (double)i, (float)i, i, "string " + i);
+            TestHelper.addRowWithValues(t, new byte[] {1, 2, 3}, true, new Date(i), (double) i, (float) i, i, "string " + i);
         }
-        t.add(new byte[]{1, 2, 3}, true, new Date(TEST_SIZE), (double) TEST_SIZE, (float) TEST_SIZE, TEST_SIZE, "");
+        TestHelper.addRowWithValues(t, new byte[] {1, 2, 3}, true, new Date(TEST_SIZE), (double) TEST_SIZE, (float) TEST_SIZE, TEST_SIZE, "");
+        sharedRealm.commitTransaction();
 
         assertEquals(0, t.findFirstBoolean(1, true));
         for (int i = 0; i < TEST_SIZE; i++) {
@@ -144,80 +173,154 @@ public class JNITableTest {
 
     @Test
     public void getValuesFromNonExistingColumn() {
-        Table t = TestHelper.getTableWithAllColumnTypes();
-        t.addEmptyRows(10);
+        Table t = TestHelper.createTableWithAllColumnTypes(sharedRealm);
+        sharedRealm.beginTransaction();
+        for (int i = 0; i < 10; i++) {
+            OsObject.createRow(t);
+        }
+        sharedRealm.commitTransaction();
 
-        try { t.getBinaryByteArray(-1, 0);          fail("Column is less than 0"); } catch (ArrayIndexOutOfBoundsException ignored) { }
-        try { t.getBinaryByteArray(-10, 0);         fail("Column is less than 0"); } catch (ArrayIndexOutOfBoundsException ignored) { }
-        try { t.getBinaryByteArray(9, 0);           fail("Column does not exist"); } catch (ArrayIndexOutOfBoundsException ignored) { }
+        try {
+            t.getBinaryByteArray(-1, 0);
+            fail("Column is less than 0");
+        } catch (ArrayIndexOutOfBoundsException ignored) { }
+        try {
+            t.getBinaryByteArray(-10, 0);
+            fail("Column is less than 0");
+        } catch (ArrayIndexOutOfBoundsException ignored) { }
+        try {
+            t.getBinaryByteArray(9, 0);
+            fail("Column does not exist");
+        } catch (ArrayIndexOutOfBoundsException ignored) { }
 
-        try { t.getBoolean(-1, 0);                  fail("Column is less than 0"); } catch (ArrayIndexOutOfBoundsException ignored) { }
-        try { t.getBoolean(-10, 0);                 fail("Column is less than 0"); } catch (ArrayIndexOutOfBoundsException ignored) { }
-        try { t.getBoolean(9, 0);                   fail("Column does not exist"); } catch (ArrayIndexOutOfBoundsException ignored) { }
+        try {
+            t.getBoolean(-1, 0);
+            fail("Column is less than 0");
+        } catch (ArrayIndexOutOfBoundsException ignored) { }
+        try {
+            t.getBoolean(-10, 0);
+            fail("Column is less than 0");
+        } catch (ArrayIndexOutOfBoundsException ignored) { }
+        try {
+            t.getBoolean(9, 0);
+            fail("Column does not exist");
+        } catch (ArrayIndexOutOfBoundsException ignored) { }
 
-        try { t.getDate(-1, 0);                     fail("Column is less than 0"); } catch (ArrayIndexOutOfBoundsException ignored) { }
-        try { t.getDate(-10, 0);                    fail("Column is less than 0"); } catch (ArrayIndexOutOfBoundsException ignored) { }
-        try { t.getDate(9, 0);                      fail("Column does not exist"); } catch (ArrayIndexOutOfBoundsException ignored) { }
+        try {
+            t.getDate(-1, 0);
+            fail("Column is less than 0");
+        } catch (ArrayIndexOutOfBoundsException ignored) { }
+        try {
+            t.getDate(-10, 0);
+            fail("Column is less than 0");
+        } catch (ArrayIndexOutOfBoundsException ignored) { }
+        try {
+            t.getDate(9, 0);
+            fail("Column does not exist");
+        } catch (ArrayIndexOutOfBoundsException ignored) { }
 
-        try { t.getDouble(-1, 0);                   fail("Column is less than 0"); } catch (ArrayIndexOutOfBoundsException ignored) { }
-        try { t.getDouble(-10, 0);                  fail("Column is less than 0"); } catch (ArrayIndexOutOfBoundsException ignored) { }
-        try { t.getDouble(9, 0);                    fail("Column does not exist"); } catch (ArrayIndexOutOfBoundsException ignored) { }
+        try {
+            t.getDouble(-1, 0);
+            fail("Column is less than 0");
+        } catch (ArrayIndexOutOfBoundsException ignored) { }
+        try {
+            t.getDouble(-10, 0);
+            fail("Column is less than 0");
+        } catch (ArrayIndexOutOfBoundsException ignored) { }
+        try {
+            t.getDouble(9, 0);
+            fail("Column does not exist");
+        } catch (ArrayIndexOutOfBoundsException ignored) { }
 
-        try { t.getFloat(-1, 0);                    fail("Column is less than 0"); } catch (ArrayIndexOutOfBoundsException ignored) { }
-        try { t.getFloat(-10, 0);                   fail("Column is less than 0"); } catch (ArrayIndexOutOfBoundsException ignored) { }
-        try { t.getFloat(9, 0);                     fail("Column does not exist"); } catch (ArrayIndexOutOfBoundsException ignored) { }
+        try {
+            t.getFloat(-1, 0);
+            fail("Column is less than 0");
+        } catch (ArrayIndexOutOfBoundsException ignored) { }
+        try {
+            t.getFloat(-10, 0);
+            fail("Column is less than 0");
+        } catch (ArrayIndexOutOfBoundsException ignored) { }
+        try {
+            t.getFloat(9, 0);
+            fail("Column does not exist");
+        } catch (ArrayIndexOutOfBoundsException ignored) { }
 
-        try { t.getLong(-1, 0);                     fail("Column is less than 0"); } catch (ArrayIndexOutOfBoundsException ignored) { }
-        try { t.getLong(-10, 0);                    fail("Column is less than 0"); } catch (ArrayIndexOutOfBoundsException ignored) { }
-        try { t.getLong(9, 0);                      fail("Column does not exist"); } catch (ArrayIndexOutOfBoundsException ignored) { }
+        try {
+            t.getLong(-1, 0);
+            fail("Column is less than 0");
+        } catch (ArrayIndexOutOfBoundsException ignored) { }
+        try {
+            t.getLong(-10, 0);
+            fail("Column is less than 0");
+        } catch (ArrayIndexOutOfBoundsException ignored) { }
+        try {
+            t.getLong(9, 0);
+            fail("Column does not exist");
+        } catch (ArrayIndexOutOfBoundsException ignored) { }
 
-        try { t.getString(-1, 0);                   fail("Column is less than 0"); } catch (ArrayIndexOutOfBoundsException ignored) { }
-        try { t.getString(-10, 0);                  fail("Column is less than 0"); } catch (ArrayIndexOutOfBoundsException ignored) { }
-        try { t.getString(9, 0);                    fail("Column does not exist"); } catch (ArrayIndexOutOfBoundsException ignored) { }
+        try {
+            t.getString(-1, 0);
+            fail("Column is less than 0");
+        } catch (ArrayIndexOutOfBoundsException ignored) { }
+        try {
+            t.getString(-10, 0);
+            fail("Column is less than 0");
+        } catch (ArrayIndexOutOfBoundsException ignored) { }
+        try {
+            t.getString(9, 0);
+            fail("Column does not exist");
+        } catch (ArrayIndexOutOfBoundsException ignored) { }
     }
 
     @Test
     public void getNonExistingColumn() {
-        Table t = new Table();
-        t.addColumn(RealmFieldType.INTEGER, "int");
+        Table t = TestHelper.createTable(sharedRealm, "temp", new TestHelper.AdditionalTableSetup() {
+            @Override
+            public void execute(Table t) {
+                t.addColumn(RealmFieldType.INTEGER, "int");
+            }
+        });
 
         assertEquals(-1, t.getColumnIndex("non-existing column"));
-        try { t.getColumnIndex(null); fail("column name null"); } catch (IllegalArgumentException ignored) { }
+        try {
+            t.getColumnIndex(null);
+            fail("column name null");
+        } catch (IllegalArgumentException ignored) { }
     }
 
     @Test
     public void setNulls() {
-        Table t = new Table();
-        t.addColumn(RealmFieldType.STRING, "");
-        t.addColumn(RealmFieldType.DATE, "");
-        t.addColumn(RealmFieldType.BINARY, "");
-        t.add("String val", new Date(), new byte[]{1, 2, 3});
+        Table t = TestHelper.createTable(sharedRealm, "temp", new TestHelper.AdditionalTableSetup() {
+            @Override
+            public void execute(Table t) {
+                t.addColumn(RealmFieldType.STRING, "");
+                t.addColumn(RealmFieldType.DATE, "");
+                t.addColumn(RealmFieldType.BINARY, "");
+                TestHelper.addRowWithValues(t, "String val", new Date(), new byte[] {1, 2, 3});
+            }
+        });
 
-        try { t.setString(0, 0, null, false);  fail("null string not allowed"); } catch (IllegalArgumentException ignored) { }
-        try { t.setDate(1, 0, null, false);    fail("null Date not allowed"); } catch (IllegalArgumentException ignored) { }
-    }
-
-    @Test
-    public void addNegativeEmptyRows() {
-        Table t = new Table();
-        t.addColumn(RealmFieldType.STRING, "colName");
-
-        try { t.addEmptyRows(-1); fail("Argument is negative"); } catch (IllegalArgumentException ignored) { }
+        sharedRealm.beginTransaction();
+        try {
+            t.setString(0, 0, null, false);
+            fail("null string not allowed");
+        } catch (IllegalArgumentException ignored) { }
+        try {
+            t.setDate(1, 0, null, false);
+            fail("null Date not allowed");
+        } catch (IllegalArgumentException ignored) { }
+        sharedRealm.commitTransaction();
     }
 
     @Test
     public void getName() {
         String TABLE_NAME = "tableName";
-        RealmConfiguration configuration = configFactory.createConfiguration();
-        Realm.deleteRealm(configuration);
-
-        SharedRealm sharedRealm = SharedRealm.getInstance(configuration);
         //noinspection TryFinallyCanBeTryWithResources
         try {
 
             // Writes transaction must be run so we are sure a db exists with the correct table.
             sharedRealm.beginTransaction();
-            sharedRealm.getTable(TABLE_NAME);
+            sharedRealm.createTable(TABLE_NAME);
             sharedRealm.commitTransaction();
 
             Table table = sharedRealm.getTable(TABLE_NAME);
@@ -229,16 +332,18 @@ public class JNITableTest {
 
     @Test
     public void shouldThrowWhenSetIndexOnWrongRealmFieldType() {
+        Table t = TestHelper.createTableWithAllColumnTypes(sharedRealm);
         for (long colIndex = 0; colIndex < t.getColumnCount(); colIndex++) {
 
             // All types supported addSearchIndex and removeSearchIndex.
             boolean exceptionExpected = (
-                            t.getColumnType(colIndex) != RealmFieldType.STRING &&
+                    t.getColumnType(colIndex) != RealmFieldType.STRING &&
                             t.getColumnType(colIndex) != RealmFieldType.INTEGER &&
                             t.getColumnType(colIndex) != RealmFieldType.BOOLEAN &&
                             t.getColumnType(colIndex) != RealmFieldType.DATE);
 
             // Tries to addSearchIndex().
+            sharedRealm.beginTransaction();
             try {
                 t.addSearchIndex(colIndex);
                 if (exceptionExpected) {
@@ -246,8 +351,10 @@ public class JNITableTest {
                 }
             } catch (IllegalArgumentException ignored) {
             }
+            sharedRealm.commitTransaction();
 
             // Tries to removeSearchIndex().
+            sharedRealm.beginTransaction();
             try {
                 // Currently core will do nothing if the column doesn't have a search index.
                 t.removeSearchIndex(colIndex);
@@ -256,7 +363,7 @@ public class JNITableTest {
                 }
             } catch (IllegalArgumentException ignored) {
             }
-
+            sharedRealm.commitTransaction();
 
             // Tries to hasSearchIndex() for all columnTypes.
             t.hasSearchIndex(colIndex);
@@ -265,54 +372,67 @@ public class JNITableTest {
 
     @Test
     public void columnName() {
-        Table t = new Table();
-        try { t.addColumn(RealmFieldType.STRING, "I am 64 characters.............................................."); fail("Only 63 characters supported"); } catch (IllegalArgumentException ignored) { }
-        t.addColumn(RealmFieldType.STRING, "I am 63 characters.............................................");
+        TestHelper.createTable(sharedRealm, "temp", new TestHelper.AdditionalTableSetup() {
+            @Override
+            public void execute(Table t) {
+                try {
+                    t.addColumn(RealmFieldType.STRING, "I am 64 characters..............................................");
+                    fail("Only 63 characters supported");
+                } catch (IllegalArgumentException ignored) { }
+                t.addColumn(RealmFieldType.STRING, "I am 63 characters.............................................");
+            }
+        });
     }
 
     @Test
     public void tableNumbers() {
-        Table t = new Table();
-        t.addColumn(RealmFieldType.INTEGER, "intCol");
-        t.addColumn(RealmFieldType.DOUBLE, "doubleCol");
-        t.addColumn(RealmFieldType.FLOAT, "floatCol");
-        t.addColumn(RealmFieldType.STRING, "StringCol");
+        Table t = TestHelper.createTable(sharedRealm, "temp", new TestHelper.AdditionalTableSetup() {
+            @Override
+            public void execute(Table t) {
+                t.addColumn(RealmFieldType.INTEGER, "intCol");
+                t.addColumn(RealmFieldType.DOUBLE, "doubleCol");
+                t.addColumn(RealmFieldType.FLOAT, "floatCol");
+                t.addColumn(RealmFieldType.STRING, "StringCol");
 
-        // Adds 3 rows of data with same values in each column.
-        t.add(1, 2.0d, 3.0f, "s1");
-        t.add(1, 2.0d, 3.0f, "s1");
-        t.add(1, 2.0d, 3.0f, "s1");
+                // Adds 3 rows of data with same values in each column.
+                TestHelper.addRowWithValues(t, 1, 2.0D, 3.0F, "s1");
+                TestHelper.addRowWithValues(t, 1, 2.0D, 3.0F, "s1");
+                TestHelper.addRowWithValues(t, 1, 2.0D, 3.0F, "s1");
 
-        // Adds other values.
-        t.add(10, 20.0d, 30.0f, "s10");
-        t.add(100, 200.0d, 300.0f, "s100");
-        t.add(1000, 2000.0d, 3000.0f, "s1000");
+                // Adds other values.
+                TestHelper.addRowWithValues(t, 10, 20.0D, 30.0F, "s10");
+                TestHelper.addRowWithValues(t, 100, 200.0D, 300.0F, "s100");
+                TestHelper.addRowWithValues(t, 1000, 2000.0D, 3000.0F, "s1000");
+            }
+        });
 
         // Counts instances of values added in the first 3 rows.
         assertEquals(3, t.count(0, 1));
-        assertEquals(3, t.count(1, 2.0d));
-        assertEquals(3, t.count(2, 3.0f));
+        assertEquals(3, t.count(1, 2.0D));
+        assertEquals(3, t.count(2, 3.0F));
         assertEquals(3, t.count(3, "s1"));
 
 
-        assertEquals(3, t.findFirstDouble(1, 20.0d)); // Find rows index for first double value of 20.0 in column 1.
-        assertEquals(4, t.findFirstFloat(2, 300.0f)); // Find rows index for first float value of 300.0 in column 2.
+        assertEquals(3, t.findFirstDouble(1, 20.0D)); // Find rows index for first double value of 20.0 in column 1.
+        assertEquals(4, t.findFirstFloat(2, 300.0F)); // Find rows index for first float value of 300.0 in column 2.
 
         // Sets double and float.
-        t.setDouble(1, 2, -2.0d, false);
-        t.setFloat(2, 2, -3.0f, false);
+        sharedRealm.beginTransaction();
+        t.setDouble(1, 2, -2.0D, false);
+        t.setFloat(2, 2, -3.0F, false);
+        sharedRealm.commitTransaction();
 
         // Gets double tests.
-        assertEquals(-2.0d, t.getDouble(1, 2));
-        assertEquals(20.0d, t.getDouble(1, 3));
-        assertEquals(200.0d, t.getDouble(1, 4));
-        assertEquals(2000.0d, t.getDouble(1, 5));
+        assertEquals(-2.0D, t.getDouble(1, 2));
+        assertEquals(20.0D, t.getDouble(1, 3));
+        assertEquals(200.0D, t.getDouble(1, 4));
+        assertEquals(2000.0D, t.getDouble(1, 5));
 
         // Gets float test.
-        assertEquals(-3.0f, t.getFloat(2, 2));
-        assertEquals(30.0f, t.getFloat(2, 3));
-        assertEquals(300.0f, t.getFloat(2, 4));
-        assertEquals(3000.0f, t.getFloat(2, 5));
+        assertEquals(-3.0F, t.getFloat(2, 2));
+        assertEquals(30.0F, t.getFloat(2, 3));
+        assertEquals(300.0F, t.getFloat(2, 4));
+        assertEquals(3000.0F, t.getFloat(2, 5));
     }
 
     // Tests the migration of a string column to be nullable.
@@ -320,56 +440,68 @@ public class JNITableTest {
     public void convertToNullable() {
         RealmFieldType[] columnTypes = {RealmFieldType.BOOLEAN, RealmFieldType.DATE, RealmFieldType.DOUBLE,
                 RealmFieldType.FLOAT, RealmFieldType.INTEGER, RealmFieldType.BINARY, RealmFieldType.STRING};
-        for (RealmFieldType columnType : columnTypes) {
+        int tableIndex = 0;
+        for (final RealmFieldType columnType : columnTypes) {
             // Tests various combinations of column names and nullability.
             String[] columnNames = {"foobar", "__TMP__0"};
-            for (boolean nullable : new boolean[]{Table.NOT_NULLABLE, Table.NULLABLE}) {
-                for (String columnName : columnNames) {
-                    Table table = new Table();
-                    long colIndex = table.addColumn(columnType, columnName, nullable);
-                    table.addColumn(RealmFieldType.BOOLEAN, "bool");
-                    table.addEmptyRow();
-                    if (columnType == RealmFieldType.BOOLEAN) {
-                        table.setBoolean(colIndex, 0, true, false);
-                    } else if (columnType == RealmFieldType.DATE) {
-                        table.setDate(colIndex, 0, new Date(0), false);
-                    } else if (columnType == RealmFieldType.DOUBLE) {
-                        table.setDouble(colIndex, 0, 1.0, false);
-                    } else if (columnType == RealmFieldType.FLOAT) {
-                        table.setFloat(colIndex, 0, 1.0f, false);
-                    } else if (columnType == RealmFieldType.INTEGER) {
-                        table.setLong(colIndex, 0, 1, false);
-                    } else if (columnType == RealmFieldType.BINARY) {
-                        table.setBinaryByteArray(colIndex, 0, new byte[]{0}, false);
-                    } else if (columnType == RealmFieldType.STRING) {
-                        table.setString(colIndex, 0, "Foo", false);
-                    }
-                    try {
-                        table.addEmptyRow();
-                        if (columnType == RealmFieldType.BINARY) {
-                            table.setBinaryByteArray(colIndex, 1, null, false);
-                        } else if (columnType == RealmFieldType.STRING) {
-                            table.setString(colIndex, 1, null, false);
-                        } else {
-                            table.getCheckedRow(1).setNull(colIndex);
-                        }
+            for (final boolean nullable : new boolean[] {Table.NOT_NULLABLE, Table.NULLABLE}) {
+                for (final String columnName : columnNames) {
+                    final AtomicLong colIndexRef = new AtomicLong();
+                    Table table = TestHelper.createTable(sharedRealm, "temp" + tableIndex, new TestHelper.AdditionalTableSetup() {
+                        @Override
+                        public void execute(Table table) {
+                            long colIndex = table.addColumn(columnType, columnName, nullable);
+                            colIndexRef.set(colIndex);
+                            table.addColumn(RealmFieldType.BOOLEAN, "bool");
+                            OsObject.createRow(table);
+                            if (columnType == RealmFieldType.BOOLEAN) {
+                                table.setBoolean(colIndex, 0, true, false);
+                            } else if (columnType == RealmFieldType.DATE) {
+                                table.setDate(colIndex, 0, new Date(0), false);
+                            } else if (columnType == RealmFieldType.DOUBLE) {
+                                table.setDouble(colIndex, 0, 1.0, false);
+                            } else if (columnType == RealmFieldType.FLOAT) {
+                                table.setFloat(colIndex, 0, 1.0F, false);
+                            } else if (columnType == RealmFieldType.INTEGER) {
+                                table.setLong(colIndex, 0, 1, false);
+                            } else if (columnType == RealmFieldType.BINARY) {
+                                table.setBinaryByteArray(colIndex, 0, new byte[] {0}, false);
+                            } else if (columnType == RealmFieldType.STRING) {
+                                table.setString(colIndex, 0, "Foo", false);
+                            }
+                            try {
+                                OsObject.createRow(table);
+                                if (columnType == RealmFieldType.BINARY) {
+                                    table.setBinaryByteArray(colIndex, 1, null, false);
+                                } else if (columnType == RealmFieldType.STRING) {
+                                    table.setString(colIndex, 1, null, false);
+                                } else {
+                                    table.getCheckedRow(1).setNull(colIndex);
+                                }
 
-                        if (!nullable) {
-                            fail();
+                                if (!nullable) {
+                                    fail();
+                                }
+                            } catch (IllegalArgumentException ignored) {
+                            }
+                            table.moveLastOver(table.size() - 1);
                         }
-                    } catch (IllegalArgumentException ignored) {
-                    }
-                    table.moveLastOver(table.size() - 1);
+                    });
                     assertEquals(1, table.size());
 
+                    long colIndex = colIndexRef.get();
+
+                    sharedRealm.beginTransaction();
                     table.convertColumnToNullable(colIndex);
+                    sharedRealm.commitTransaction();
                     assertTrue(table.isColumnNullable(colIndex));
                     assertEquals(1, table.size());
                     assertEquals(2, table.getColumnCount());
                     assertTrue(table.getColumnIndex(columnName) >= 0);
                     assertEquals(colIndex, table.getColumnIndex(columnName));
 
-                    table.addEmptyRow();
+                    sharedRealm.beginTransaction();
+                    OsObject.createRow(table);
                     if (columnType == RealmFieldType.BINARY) {
                         table.setBinaryByteArray(colIndex, 0, null, false);
                     } else if (columnType == RealmFieldType.STRING) {
@@ -377,6 +509,7 @@ public class JNITableTest {
                     } else {
                         table.getCheckedRow(0).setNull(colIndex);
                     }
+                    sharedRealm.commitTransaction();
 
                     assertEquals(2, table.size());
 
@@ -387,6 +520,7 @@ public class JNITableTest {
                     } else {
                         assertTrue(table.getUncheckedRow(1).isNull(colIndex));
                     }
+                    tableIndex++;
                 }
             }
         }
@@ -396,54 +530,65 @@ public class JNITableTest {
     public void convertToNotNullable() {
         RealmFieldType[] columnTypes = {RealmFieldType.BOOLEAN, RealmFieldType.DATE, RealmFieldType.DOUBLE,
                 RealmFieldType.FLOAT, RealmFieldType.INTEGER, RealmFieldType.BINARY, RealmFieldType.STRING};
-        for (RealmFieldType columnType : columnTypes) {
+        int tableIndex = 0;
+        for (final RealmFieldType columnType : columnTypes) {
             // Tests various combinations of column names and nullability.
             String[] columnNames = {"foobar", "__TMP__0"};
-            for (boolean nullable : new boolean[]{Table.NOT_NULLABLE, Table.NULLABLE}) {
-                for (String columnName : columnNames) {
-                    Table table = new Table();
-                    long colIndex = table.addColumn(columnType, columnName, nullable);
-                    table.addColumn(RealmFieldType.BOOLEAN, "bool");
-                    table.addEmptyRow();
-                    if (columnType == RealmFieldType.BOOLEAN)
-                        table.setBoolean(colIndex, 0, true, false);
-                    else if (columnType == RealmFieldType.DATE)
-                        table.setDate(colIndex, 0, new Date(1), false);
-                    else if (columnType == RealmFieldType.DOUBLE)
-                        table.setDouble(colIndex, 0, 1.0, false);
-                    else if (columnType == RealmFieldType.FLOAT)
-                        table.setFloat(colIndex, 0, 1.0f, false);
-                    else if (columnType == RealmFieldType.INTEGER)
-                        table.setLong(colIndex, 0, 1, false);
-                    else if (columnType == RealmFieldType.BINARY)
-                        table.setBinaryByteArray(colIndex, 0, new byte[]{0}, false);
-                    else if (columnType == RealmFieldType.STRING)
-                        table.setString(colIndex, 0, "Foo", false);
-                    try {
-                        table.addEmptyRow();
-                        if (columnType == RealmFieldType.BINARY) {
-                            table.setBinaryByteArray(colIndex, 1, null, false);
-                        } else if (columnType == RealmFieldType.STRING) {
-                            table.setString(colIndex, 1, null, false);
-                        } else {
-                            table.getCheckedRow(1).setNull(colIndex);
-                        }
+            for (final boolean nullable : new boolean[] {Table.NOT_NULLABLE, Table.NULLABLE}) {
+                for (final String columnName : columnNames) {
+                    final AtomicLong colIndexRef = new AtomicLong();
+                    Table table = TestHelper.createTable(sharedRealm, "temp" + tableIndex, new TestHelper.AdditionalTableSetup() {
+                        @Override
+                        public void execute(Table table) {
+                            long colIndex = table.addColumn(columnType, columnName, nullable);
+                            colIndexRef.set(colIndex);
+                            table.addColumn(RealmFieldType.BOOLEAN, "bool");
+                            OsObject.createRow(table);
+                            if (columnType == RealmFieldType.BOOLEAN) {
+                                table.setBoolean(colIndex, 0, true, false);
+                            } else if (columnType == RealmFieldType.DATE) {
+                                table.setDate(colIndex, 0, new Date(1), false);
+                            } else if (columnType == RealmFieldType.DOUBLE) {
+                                table.setDouble(colIndex, 0, 1.0, false);
+                            } else if (columnType == RealmFieldType.FLOAT) {
+                                table.setFloat(colIndex, 0, 1.0F, false);
+                            } else if (columnType == RealmFieldType.INTEGER) {
+                                table.setLong(colIndex, 0, 1, false);
+                            } else if (columnType == RealmFieldType.BINARY) {
+                                table.setBinaryByteArray(colIndex, 0, new byte[] {0}, false);
+                            } else if (columnType == RealmFieldType.STRING) { table.setString(colIndex, 0, "Foo", false); }
+                            try {
+                                OsObject.createRow(table);
+                                if (columnType == RealmFieldType.BINARY) {
+                                    table.setBinaryByteArray(colIndex, 1, null, false);
+                                } else if (columnType == RealmFieldType.STRING) {
+                                    table.setString(colIndex, 1, null, false);
+                                } else {
+                                    table.getCheckedRow(1).setNull(colIndex);
+                                }
 
-                        if (!nullable) {
-                            fail();
+                                if (!nullable) {
+                                    fail();
+                                }
+                            } catch (IllegalArgumentException ignored) {
+                            }
                         }
-                    } catch (IllegalArgumentException ignored) {
-                    }
+                    });
                     assertEquals(2, table.size());
 
+                    long colIndex = colIndexRef.get();
+
+                    sharedRealm.beginTransaction();
                     table.convertColumnToNotNullable(colIndex);
+                    sharedRealm.commitTransaction();
                     assertFalse(table.isColumnNullable(colIndex));
                     assertEquals(2, table.size());
                     assertEquals(2, table.getColumnCount());
                     assertTrue(table.getColumnIndex(columnName) >= 0);
                     assertEquals(colIndex, table.getColumnIndex(columnName));
 
-                    table.addEmptyRow();
+                    sharedRealm.beginTransaction();
+                    OsObject.createRow(table);
                     try {
                         if (columnType == RealmFieldType.BINARY) {
                             table.setBinaryByteArray(colIndex, 0, null, false);
@@ -458,6 +603,8 @@ public class JNITableTest {
                     } catch (IllegalArgumentException ignored) {
                     }
                     table.moveLastOver(table.size() -1);
+                    sharedRealm.commitTransaction();
+
                     assertEquals(2, table.size());
 
                     if (columnType == RealmFieldType.BINARY) {
@@ -467,17 +614,19 @@ public class JNITableTest {
                         assertEquals("", table.getString(colIndex, 1));
                     } else {
                         assertFalse(table.getUncheckedRow(1).isNull(colIndex));
-                        if (columnType == RealmFieldType.BOOLEAN)
+                        if (columnType == RealmFieldType.BOOLEAN) {
                             assertEquals(false, table.getBoolean(colIndex, 1));
-                        else if (columnType == RealmFieldType.DATE)
+                        } else if (columnType == RealmFieldType.DATE) {
                             assertEquals(0, table.getDate(colIndex, 1).getTime());
-                        else if (columnType == RealmFieldType.DOUBLE)
+                        } else if (columnType == RealmFieldType.DOUBLE) {
                             assertEquals(0.0, table.getDouble(colIndex, 1));
-                        else if (columnType == RealmFieldType.FLOAT)
-                            assertEquals(0.0f, table.getFloat(colIndex, 1));
-                        else if (columnType == RealmFieldType.INTEGER)
+                        } else if (columnType == RealmFieldType.FLOAT) {
+                            assertEquals(0.0F, table.getFloat(colIndex, 1));
+                        } else if (columnType == RealmFieldType.INTEGER) {
                             assertEquals(0, table.getLong(colIndex, 1));
+                        }
                     }
+                    tableIndex++;
                 }
             }
         }
@@ -486,9 +635,13 @@ public class JNITableTest {
     // Adds column and read back if it is nullable or not.
     @Test
     public void isNullable() {
-        Table table = new Table();
-        table.addColumn(RealmFieldType.STRING, "string1", Table.NOT_NULLABLE);
-        table.addColumn(RealmFieldType.STRING, "string2", Table.NULLABLE);
+        Table table = TestHelper.createTable(sharedRealm, "temp", new TestHelper.AdditionalTableSetup() {
+            @Override
+            public void execute(Table table) {
+                table.addColumn(RealmFieldType.STRING, "string1", Table.NOT_NULLABLE);
+                table.addColumn(RealmFieldType.STRING, "string2", Table.NULLABLE);
+            }
+        });
 
         assertFalse(table.isColumnNullable(0));
         assertTrue(table.isColumnNullable(1));
@@ -496,26 +649,24 @@ public class JNITableTest {
 
     @Test
     public void defaultValue_setAndGet() {
-        // t is not used in this test.
-        t = null;
         final SharedRealm sharedRealm = SharedRealm.getInstance(configFactory.createConfiguration());
         //noinspection TryFinallyCanBeTryWithResources
         try {
             sharedRealm.beginTransaction();
-            final Table table = sharedRealm.getTable(Table.TABLE_PREFIX + "DefaultValueTest");
+            final Table table = sharedRealm.createTable(Table.getTableNameForClass("DefaultValueTest"));
             sharedRealm.commitTransaction();
 
             List<Pair<RealmFieldType, Object>> columnInfoList = Arrays.asList(
                     new Pair<RealmFieldType, Object>(RealmFieldType.STRING, "string value"),
                     new Pair<RealmFieldType, Object>(RealmFieldType.INTEGER, 100L),
                     new Pair<RealmFieldType, Object>(RealmFieldType.BOOLEAN, true),
-                    new Pair<RealmFieldType, Object>(RealmFieldType.BINARY, new byte[]{123}),
+                    new Pair<RealmFieldType, Object>(RealmFieldType.BINARY, new byte[] {123}),
                     new Pair<RealmFieldType, Object>(RealmFieldType.DATE, new Date(123456)),
-                    new Pair<RealmFieldType, Object>(RealmFieldType.FLOAT, 1.234f),
+                    new Pair<RealmFieldType, Object>(RealmFieldType.FLOAT, 1.234F),
                     new Pair<RealmFieldType, Object>(RealmFieldType.DOUBLE, Math.PI),
                     new Pair<RealmFieldType, Object>(RealmFieldType.OBJECT, 0L)
-                    // Currently, LIST does not support default value.
-                    // new Pair<RealmFieldType, Object>(RealmFieldType.LIST, )
+                    // FIXME: Currently, LIST does not support default value.
+                    // new CollectionChange<RealmFieldType, Object>(RealmFieldType.LIST, )
             );
 
             for (Pair<RealmFieldType, Object> columnInfo : columnInfoList) {
@@ -528,7 +679,7 @@ public class JNITableTest {
             }
 
             sharedRealm.beginTransaction();
-            table.addEmptyRow();
+            OsObject.createRow(table);
 
             ListIterator<Pair<RealmFieldType, Object>> it = columnInfoList.listIterator();
             for (int columnIndex = 0; columnIndex < columnInfoList.size(); columnIndex++) {
@@ -619,26 +770,24 @@ public class JNITableTest {
 
     @Test
     public void defaultValue_setMultipleTimes() {
-        // t is not used in this test.
-        t = null;
         final SharedRealm sharedRealm = SharedRealm.getInstance(configFactory.createConfiguration());
         //noinspection TryFinallyCanBeTryWithResources
         try {
             sharedRealm.beginTransaction();
-            final Table table = sharedRealm.getTable(Table.TABLE_PREFIX + "DefaultValueTest");
+            final Table table = sharedRealm.createTable(Table.getTableNameForClass("DefaultValueTest"));
             sharedRealm.commitTransaction();
 
             List<Pair<RealmFieldType, Object>> columnInfoList = Arrays.asList(
                     new Pair<RealmFieldType, Object>(RealmFieldType.STRING, new String[] {"string value1", "string value2"}),
                     new Pair<RealmFieldType, Object>(RealmFieldType.INTEGER, new Long[] {100L, 102L}),
                     new Pair<RealmFieldType, Object>(RealmFieldType.BOOLEAN, new Boolean[] {false, true}),
-                    new Pair<RealmFieldType, Object>(RealmFieldType.BINARY, new byte[][] {new byte[]{123}, new byte[]{-123}}),
+                    new Pair<RealmFieldType, Object>(RealmFieldType.BINARY, new byte[][] {new byte[] {123}, new byte[] {-123}}),
                     new Pair<RealmFieldType, Object>(RealmFieldType.DATE, new Date[] {new Date(123456), new Date(13579)}),
-                    new Pair<RealmFieldType, Object>(RealmFieldType.FLOAT, new Float[] {1.234f, 100f}),
+                    new Pair<RealmFieldType, Object>(RealmFieldType.FLOAT, new Float[] {1.234F, 100F}),
                     new Pair<RealmFieldType, Object>(RealmFieldType.DOUBLE, new Double[] {Math.PI, Math.E}),
                     new Pair<RealmFieldType, Object>(RealmFieldType.OBJECT, new Long[] {0L, 1L})
-                    // Currently, LIST does not support default value.
-                    // new Pair<RealmFieldType, Object>(RealmFieldType.LIST, )
+                    // FIXME: Currently, LIST does not support default value.
+                    // new CollectionChange<RealmFieldType, Object>(RealmFieldType.LIST, )
             );
 
             for (Pair<RealmFieldType, Object> columnInfo : columnInfoList) {
@@ -651,8 +800,8 @@ public class JNITableTest {
             }
 
             sharedRealm.beginTransaction();
-            table.addEmptyRow();
-            table.addEmptyRow(); // For link field update.
+            OsObject.createRow(table);
+            OsObject.createRow(table); // For link field update.
 
             ListIterator<Pair<RealmFieldType, Object>> it = columnInfoList.listIterator();
             for (int columnIndex = 0; columnIndex < columnInfoList.size(); columnIndex++) {
@@ -751,26 +900,24 @@ public class JNITableTest {
 
     @Test
     public void defaultValue_overwrittenByNonDefault() {
-        // t is not used in this test.
-        t = null;
         final SharedRealm sharedRealm = SharedRealm.getInstance(configFactory.createConfiguration());
         //noinspection TryFinallyCanBeTryWithResources
         try {
             sharedRealm.beginTransaction();
-            final Table table = sharedRealm.getTable(Table.TABLE_PREFIX + "DefaultValueTest");
+            final Table table = sharedRealm.createTable(Table.getTableNameForClass("DefaultValueTest"));
             sharedRealm.commitTransaction();
 
             List<Pair<RealmFieldType, Object>> columnInfoList = Arrays.asList(
                     new Pair<RealmFieldType, Object>(RealmFieldType.STRING, new String[] {"string value1", "string value2"}),
                     new Pair<RealmFieldType, Object>(RealmFieldType.INTEGER, new Long[] {100L, 102L}),
                     new Pair<RealmFieldType, Object>(RealmFieldType.BOOLEAN, new Boolean[] {false, true}),
-                    new Pair<RealmFieldType, Object>(RealmFieldType.BINARY, new byte[][] {new byte[]{123}, new byte[]{-123}}),
+                    new Pair<RealmFieldType, Object>(RealmFieldType.BINARY, new byte[][] {new byte[] {123}, new byte[] {-123}}),
                     new Pair<RealmFieldType, Object>(RealmFieldType.DATE, new Date[] {new Date(123456), new Date(13579)}),
-                    new Pair<RealmFieldType, Object>(RealmFieldType.FLOAT, new Float[] {1.234f, 100f}),
+                    new Pair<RealmFieldType, Object>(RealmFieldType.FLOAT, new Float[] {1.234F, 100F}),
                     new Pair<RealmFieldType, Object>(RealmFieldType.DOUBLE, new Double[] {Math.PI, Math.E}),
                     new Pair<RealmFieldType, Object>(RealmFieldType.OBJECT, new Long[] {0L, 1L})
-                    // Currently, LIST does not support default value.
-                    // new Pair<RealmFieldType, Object>(RealmFieldType.LIST, )
+                    // FIXME: Currently, LIST does not support default value.
+                    // new CollectionChange<RealmFieldType, Object>(RealmFieldType.LIST, )
             );
 
             for (Pair<RealmFieldType, Object> columnInfo : columnInfoList) {
@@ -783,8 +930,8 @@ public class JNITableTest {
             }
 
             sharedRealm.beginTransaction();
-            table.addEmptyRow();
-            table.addEmptyRow(); // For link field update.
+            OsObject.createRow(table);
+            OsObject.createRow(table); // For link field update.
 
             // Sets as default.
             ListIterator<Pair<RealmFieldType, Object>> it = columnInfoList.listIterator();

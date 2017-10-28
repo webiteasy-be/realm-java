@@ -16,6 +16,9 @@
 
 package io.realm.internal;
 
+import javax.annotation.Nullable;
+
+
 /**
  * To describe what the Realm instance can do associated with the thread it is created on.
  * The capabilities are determined when the Realm gets created. This interface could be called from another thread which
@@ -34,5 +37,11 @@ public interface Capabilities {
      *
      * @param exceptionMessage message which is contained in the exception.
      */
-    void checkCanDeliverNotification(String exceptionMessage);
+    void checkCanDeliverNotification(@Nullable String exceptionMessage);
+
+    /**
+     * Multiple threads might be able to deliver notifications, but the Main thread in GUI applications often have
+     * special rules that need to be enforced.
+     */
+    boolean isMainThread();
 }

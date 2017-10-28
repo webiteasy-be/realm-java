@@ -23,31 +23,26 @@ import android.widget.TextView;
 
 import com.example.securetokenandroidkeystore.R;
 
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-
 import java.security.KeyStoreException;
-import java.util.UUID;
 
-import io.realm.android.CipherClient;
-import io.realm.android.SecureUserStore;
+import io.realm.ObjectServerError;
+import io.realm.Realm;
+import io.realm.SyncConfiguration;
+import io.realm.SyncCredentials;
+import io.realm.SyncManager;
 import io.realm.SyncUser;
 import io.realm.android.SecureUserStore;
-import io.realm.SyncManager;
-import io.realm.SyncConfiguration;
-import io.realm.Realm;
-import io.realm.internal.objectserver.Token;
-import io.realm.internal.objectserver.ObjectServerUser;
 
 /**
  * Activity responsible of unlocking the KeyStore
- * before using the {@link realm.io.android.SecureUserStore} to encrypt
+ * before using the {@link io.realm.android.SecureUserStore} to encrypt
  * the Token we get from the session
  */
 public class MainActivity extends AppCompatActivity {
-    private CipherClient cryptoClient;
     private TextView txtKeystoreState;
+
+    private SecureUserStore secureUserStore;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -55,12 +50,14 @@ public class MainActivity extends AppCompatActivity {
         txtKeystoreState = (TextView) findViewById(R.id.txtLabelKeyStore);
 
         try {
-            cryptoClient = new CipherClient(this);
-            if (cryptoClient.isKeystoreUnlocked()) {
+            secureUserStore = new SecureUserStore(this);
+            SyncManager.setUserStore(secureUserStore);
+
+            if (secureUserStore.isKeystoreUnlocked()) {
                 buildSyncConf();
                 keystoreUnlockedMessage();
             } else {
-                cryptoClient.unlockKeystore();
+                secureUserStore.unlockKeystore();
             }
         } catch (KeyStoreException e) {
             e.printStackTrace();
@@ -72,11 +69,11 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         try {
             // We return to the app after the KeyStore is unlocked or not.
-            if (cryptoClient.isKeystoreUnlocked()) {
+            if (secureUserStore.isKeystoreUnlocked()) {
                 buildSyncConf();
-                keystoreUnlockedMessage ();
+                keystoreUnlockedMessage();
             } else {
-                keystoreLockedMessage ();
+                keystoreLockedMessage();
             }
         } catch (KeyStoreException e) {
             e.printStackTrace();
@@ -84,52 +81,31 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // build SyncConfiguration with a user store to store encrypted Token.
-    private void buildSyncConf () {
-        try {
-            SyncManager.setUserStore(new SecureUserStore(MainActivity.this));
-            // the rest of Sync logic ...
-            SyncUser user = createTestUser(0);
-            String url = "realm://objectserver.realm.io/default";
-            SyncConfiguration secureConfig = new SyncConfiguration.Builder(user, url).build();
-            Realm realm = Realm.getInstance(secureConfig);
-            // ... 
+    private void buildSyncConf() {
+        // the rest of Sync logic ...
+        SyncCredentials credentials = SyncCredentials.usernamePassword("username", "password");
+        final String urlAuth = "http://objectserver.realm.io:9080/auth";
+        final String url = "realm://objectserver.realm.io/default";
 
-        } catch (KeyStoreException e) {
-            e.printStackTrace();
-        }
-    }
-    // Helpers
-    private final static String USER_TOKEN = UUID.randomUUID().toString();
-    private final static String REALM_TOKEN = UUID.randomUUID().toString();
+        SyncUser.loginAsync(credentials, urlAuth, new SyncUser.Callback<SyncUser>() {
+            @Override
+            public void onSuccess(SyncUser user) {
+                SyncConfiguration secureConfig = new SyncConfiguration.Builder(user, url).build();
+                Realm realm = Realm.getInstance(secureConfig);
+                // ...
+            }
 
-    private static SyncUser createTestUser(long expires) {
-        Token userToken = new Token(USER_TOKEN, "JohnDoe", null, expires, null);
-        Token accessToken = new Token(REALM_TOKEN, "JohnDoe", "/foo", expires, new Token.Permission[] {Token.Permission.DOWNLOAD });
-        ObjectServerUser.AccessDescription desc = new ObjectServerUser.AccessDescription(accessToken, "/data/data/myapp/files/default", false);
-
-        JSONObject obj = new JSONObject();
-        try {
-            JSONArray realmList = new JSONArray();
-            JSONObject realmDesc = new JSONObject();
-            realmDesc.put("uri", "realm://objectserver.realm.io/default");
-            realmDesc.put("description", desc.toJson());
-            realmList.put(realmDesc);
-
-            obj.put("authUrl", "http://objectserver.realm.io/auth");
-            obj.put("userToken", userToken.toJson());
-            obj.put("realms", realmList);
-            return SyncUser.fromJson(obj.toString());
-        } catch (JSONException e) {
-            throw new RuntimeException(e);
-        }
+            @Override
+            public void onError(ObjectServerError error) {}
+        });
     }
 
-    private void keystoreLockedMessage () {
+    private void keystoreLockedMessage() {
         txtKeystoreState.setBackgroundColor(ContextCompat.getColor(this, R.color.colorLocked));
         txtKeystoreState.setText(R.string.locked_text);
     }
 
-    private void keystoreUnlockedMessage () {
+    private void keystoreUnlockedMessage() {
         txtKeystoreState.setBackgroundColor(ContextCompat.getColor(this, R.color.colorActivated));
         txtKeystoreState.setText(R.string.unlocked_text);
     }

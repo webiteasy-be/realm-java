@@ -27,6 +27,8 @@ import org.junit.runner.RunWith;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import javax.annotation.Nullable;
+
 import io.realm.RealmChangeListener;
 import io.realm.RealmConfiguration;
 import io.realm.internal.android.AndroidRealmNotifier;
@@ -52,7 +54,12 @@ public class RealmNotifierTests {
         }
 
         @Override
-        public void checkCanDeliverNotification(String exceptionMessage) {
+        public void checkCanDeliverNotification(@Nullable String exceptionMessage) {
+        }
+
+        @Override
+        public boolean isMainThread() {
+            return false;
         }
     };
 
@@ -65,7 +72,9 @@ public class RealmNotifierTests {
     }
 
     private SharedRealm getSharedRealm(RealmConfiguration config) {
-        return SharedRealm.getInstance(config, null, true);
+        OsRealmConfig.Builder configBuilder = new OsRealmConfig.Builder(config)
+                .autoUpdateNotification(true);
+        return SharedRealm.getInstance(configBuilder);
     }
 
     @Test
@@ -101,15 +110,11 @@ public class RealmNotifierTests {
     }
 
     private void makeRemoteChanges(final RealmConfiguration config) {
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                SharedRealm sharedRealm = getSharedRealm(config);
-                sharedRealm.beginTransaction();
-                sharedRealm.commitTransaction();
-                sharedRealm.close();
-            }
-        }).start();
+        // We don't use cache from RealmCoordinator
+        SharedRealm sharedRealm = getSharedRealm(config);
+        sharedRealm.beginTransaction();
+        sharedRealm.commitTransaction();
+        sharedRealm.close();
     }
 
     @Test

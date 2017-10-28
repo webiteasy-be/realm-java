@@ -58,10 +58,9 @@ public class RealmProxyMediatorTests {
     }
 
     @Test
-    public void validateTable_noDuplicateIndexInIndexFields() {
+    public void createColumnInfo_noDuplicateIndexInIndexFields() {
         RealmProxyMediator mediator = realm.getConfiguration().getSchemaMediator();
-        CatRealmProxy.CatColumnInfo columnInfo;
-        columnInfo = (CatRealmProxy.CatColumnInfo) mediator.validateTable(Cat.class, realm.sharedRealm, false);
+        CatRealmProxy.CatColumnInfo columnInfo = (CatRealmProxy.CatColumnInfo) mediator.createColumnInfo(Cat.class, realm.sharedRealm.getSchemaInfo());
 
         final Set<Long> indexSet = new HashSet<Long>();
         int indexCount = 0;
@@ -87,10 +86,10 @@ public class RealmProxyMediatorTests {
     }
 
     @Test
-    public void validateTable_noDuplicateIndexInIndicesMap() {
+    public void createColumnInfo_noDuplicateIndexInIndicesMap() {
         RealmProxyMediator mediator = realm.getConfiguration().getSchemaMediator();
         CatRealmProxy.CatColumnInfo columnInfo;
-        columnInfo = (CatRealmProxy.CatColumnInfo) mediator.validateTable(Cat.class, realm.sharedRealm, false);
+        columnInfo = (CatRealmProxy.CatColumnInfo) mediator.createColumnInfo(Cat.class, realm.sharedRealm.getSchemaInfo());
 
         final Set<Long> indexSet = new HashSet<Long>();
         int indexCount = 0;
@@ -100,7 +99,7 @@ public class RealmProxyMediatorTests {
             if (Modifier.isStatic(field.getModifiers())) {
                 continue;
             }
-            indexSet.add(columnInfo.getIndicesMap().get(field.getName()));
+            indexSet.add(columnInfo.getColumnIndex(field.getName()));
             indexCount++;
         }
 

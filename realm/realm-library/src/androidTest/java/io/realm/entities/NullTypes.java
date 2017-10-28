@@ -20,6 +20,8 @@ import java.util.Date;
 
 import io.realm.RealmList;
 import io.realm.RealmObject;
+import io.realm.RealmResults;
+import io.realm.annotations.LinkingObjects;
 import io.realm.annotations.PrimaryKey;
 import io.realm.annotations.Required;
 
@@ -37,30 +39,53 @@ import io.realm.annotations.Required;
 // 11 Object
 public class NullTypes extends RealmObject {
 
-    public static String CLASS_NAME = "NullTypes";
-    public static String FIELD_ID = "id";
-    public static String FIELD_STRING_NOT_NULL = "fieldStringNotNull";
-    public static String FIELD_STRING_NULL = "fieldStringNull";
-    public static String FIELD_BYTES_NOT_NULL = "fieldBytesNotNull";
-    public static String FIELD_BYTES_NULL = "fieldBytesNull";
-    public static String FIELD_BOOLEAN_NOT_NULL = "fieldBooleanNotNull";
-    public static String FIELD_BOOLEAN_NULL = "fieldBooleanNull";
-    public static String FIELD_BYTE_NOT_NULL = "fieldByteNotNull";
-    public static String FIELD_BYTE_NULL = "fieldByteNull";
-    public static String FIELD_SHORT_NOT_NULL = "fieldShortNotNull";
-    public static String FIELD_SHORT_NULL = "fieldShortNull";
-    public static String FIELD_INTEGER_NOT_NULL = "fieldIntegerNotNull";
-    public static String FIELD_INTEGER_NULL = "fieldIntegerNull";
-    public static String FIELD_LONG_NOT_NULL = "fieldLongNotNull";
-    public static String FIELD_LONG_NULL = "fieldLongNull";
-    public static String FIELD_FLOAT_NOT_NULL = "fieldFloatNotNull";
-    public static String FIELD_FLOAT_NULL = "fieldFloatNull";
-    public static String FIELD_DOUBLE_NOT_NULL = "fieldDoubleNotNull";
-    public static String FIELD_DOUBLE_NULL = "fieldDoubleNull";
-    public static String FIELD_DATE_NOT_NULL = "fieldDateNotNull";
-    public static String FIELD_DATE_NULL = "fieldDateNull";
-    public static String FIELD_OBJECT_NULL = "fieldObjectNull";
-    public static String FIELD_LIST_NULL = "fieldListNull";
+    public static final String CLASS_NAME = "NullTypes";
+    public static final String FIELD_ID = "id";
+    public static final String FIELD_STRING_NOT_NULL = "fieldStringNotNull";
+    public static final String FIELD_STRING_NULL = "fieldStringNull";
+    public static final String FIELD_BYTES_NOT_NULL = "fieldBytesNotNull";
+    public static final String FIELD_BYTES_NULL = "fieldBytesNull";
+    public static final String FIELD_BOOLEAN_NOT_NULL = "fieldBooleanNotNull";
+    public static final String FIELD_BOOLEAN_NULL = "fieldBooleanNull";
+    public static final String FIELD_BYTE_NOT_NULL = "fieldByteNotNull";
+    public static final String FIELD_BYTE_NULL = "fieldByteNull";
+    public static final String FIELD_SHORT_NOT_NULL = "fieldShortNotNull";
+    public static final String FIELD_SHORT_NULL = "fieldShortNull";
+    public static final String FIELD_INTEGER_NOT_NULL = "fieldIntegerNotNull";
+    public static final String FIELD_INTEGER_NULL = "fieldIntegerNull";
+    public static final String FIELD_LONG_NOT_NULL = "fieldLongNotNull";
+    public static final String FIELD_LONG_NULL = "fieldLongNull";
+    public static final String FIELD_FLOAT_NOT_NULL = "fieldFloatNotNull";
+    public static final String FIELD_FLOAT_NULL = "fieldFloatNull";
+    public static final String FIELD_DOUBLE_NOT_NULL = "fieldDoubleNotNull";
+    public static final String FIELD_DOUBLE_NULL = "fieldDoubleNull";
+    public static final String FIELD_DATE_NOT_NULL = "fieldDateNotNull";
+    public static final String FIELD_DATE_NULL = "fieldDateNull";
+    public static final String FIELD_OBJECT_NULL = "fieldObjectNull";
+    public static final String FIELD_LIST_NULL = "fieldListNull";
+    public static final String FIELD_LO_OBJECT = "objectParents";
+    public static final String FIELD_LO_LIST = "listParents";
+
+    public static final String FIELD_STRING_LIST_NOT_NULL = "fieldStringListNotNull";
+    public static final String FIELD_STRING_LIST_NULL = "fieldStringListNull";
+    public static final String FIELD_BINARY_LIST_NOT_NULL = "fieldBinaryListNotNull";
+    public static final String FIELD_BINARY_LIST_NULL = "fieldBinaryListNull";
+    public static final String FIELD_BOOLEAN_LIST_NOT_NULL = "fieldBooleanListNotNull";
+    public static final String FIELD_BOOLEAN_LIST_NULL = "fieldBooleanListNull";
+    public static final String FIELD_LONG_LIST_NOT_NULL = "fieldLongListNotNull";
+    public static final String FIELD_LONG_LIST_NULL = "fieldLongListNull";
+    public static final String FIELD_INTEGER_LIST_NOT_NULL = "fieldIntegerListNotNull";
+    public static final String FIELD_INTEGER_LIST_NULL = "fieldIntegerListNull";
+    public static final String FIELD_SHORT_LIST_NOT_NULL = "fieldShortListNotNull";
+    public static final String FIELD_SHORT_LIST_NULL = "fieldShortListNull";
+    public static final String FIELD_BYTE_LIST_NOT_NULL = "fieldByteListNotNull";
+    public static final String FIELD_BYTE_LIST_NULL = "fieldByteListNull";
+    public static final String FIELD_DOUBLE_LIST_NOT_NULL = "fieldDoubleListNotNull";
+    public static final String FIELD_DOUBLE_LIST_NULL = "fieldDoubleListNull";
+    public static final String FIELD_FLOAT_LIST_NOT_NULL = "fieldFloatListNotNull";
+    public static final String FIELD_FLOAT_LIST_NULL = "fieldFloatListNull";
+    public static final String FIELD_DATE_LIST_NOT_NULL = "fieldDateListNotNull";
+    public static final String FIELD_DATE_LIST_NULL = "fieldDateListNull";
 
     @PrimaryKey
     private int id;
@@ -107,7 +132,56 @@ public class NullTypes extends RealmObject {
 
     private NullTypes fieldObjectNull;
 
+    // never nullable
     private RealmList<NullTypes> fieldListNull;
+
+    @Required
+    private RealmList<String> fieldStringListNotNull;
+    private RealmList<String> fieldStringListNull;
+
+    @Required
+    private RealmList<byte[]> fieldBinaryListNotNull;
+    private RealmList<byte[]> fieldBinaryListNull;
+
+    @Required
+    private RealmList<Boolean> fieldBooleanListNotNull;
+    private RealmList<Boolean> fieldBooleanListNull;
+
+    @Required
+    private RealmList<Long> fieldLongListNotNull;
+    private RealmList<Long> fieldLongListNull;
+
+    @Required
+    private RealmList<Integer> fieldIntegerListNotNull;
+    private RealmList<Integer> fieldIntegerListNull;
+
+    @Required
+    private RealmList<Short> fieldShortListNotNull;
+    private RealmList<Short> fieldShortListNull;
+
+    @Required
+    private RealmList<Byte> fieldByteListNotNull;
+    private RealmList<Byte> fieldByteListNull;
+
+    @Required
+    private RealmList<Double> fieldDoubleListNotNull;
+    private RealmList<Double> fieldDoubleListNull;
+
+    @Required
+    private RealmList<Float> fieldFloatListNotNull;
+    private RealmList<Float> fieldFloatListNull;
+
+    @Required
+    private RealmList<Date> fieldDateListNotNull;
+    private RealmList<Date> fieldDateListNull;
+
+    // never nullable
+    @LinkingObjects(FIELD_OBJECT_NULL)
+    private final RealmResults<NullTypes> objectParents = null;
+
+    // never nullable
+    @LinkingObjects(FIELD_LIST_NULL)
+    private final RealmResults<NullTypes> listParents = null;
 
     public int getId() {
         return id;
@@ -291,5 +365,173 @@ public class NullTypes extends RealmObject {
 
     public void setFieldListNull(RealmList<NullTypes> fieldListNull) {
         this.fieldListNull = fieldListNull;
+    }
+
+    public RealmResults<NullTypes> getObjectParents() {
+        return objectParents;
+    }
+
+    public RealmResults<NullTypes> getListParents() {
+        return listParents;
+    }
+
+    public RealmList<String> getFieldStringListNotNull() {
+        return fieldStringListNotNull;
+    }
+
+    public void setFieldStringListNotNull(RealmList<String> fieldStringListNotNull) {
+        this.fieldStringListNotNull = fieldStringListNotNull;
+    }
+
+    public RealmList<String> getFieldStringListNull() {
+        return fieldStringListNull;
+    }
+
+    public void setFieldStringListNull(RealmList<String> fieldStringListNull) {
+        this.fieldStringListNull = fieldStringListNull;
+    }
+
+    public RealmList<byte[]> getFieldBinaryListNotNull() {
+        return fieldBinaryListNotNull;
+    }
+
+    public void setFieldBinaryListNotNull(RealmList<byte[]> fieldBinaryListNotNull) {
+        this.fieldBinaryListNotNull = fieldBinaryListNotNull;
+    }
+
+    public RealmList<byte[]> getFieldBinaryListNull() {
+        return fieldBinaryListNull;
+    }
+
+    public void setFieldBinaryListNull(RealmList<byte[]> fieldBinaryListNull) {
+        this.fieldBinaryListNull = fieldBinaryListNull;
+    }
+
+    public RealmList<Boolean> getFieldBooleanListNotNull() {
+        return fieldBooleanListNotNull;
+    }
+
+    public void setFieldBooleanListNotNull(RealmList<Boolean> fieldBooleanListNotNull) {
+        this.fieldBooleanListNotNull = fieldBooleanListNotNull;
+    }
+
+    public RealmList<Boolean> getFieldBooleanListNull() {
+        return fieldBooleanListNull;
+    }
+
+    public void setFieldBooleanListNull(RealmList<Boolean> fieldBooleanListNull) {
+        this.fieldBooleanListNull = fieldBooleanListNull;
+    }
+
+    public RealmList<Long> getFieldLongListNotNull() {
+        return fieldLongListNotNull;
+    }
+
+    public void setFieldLongListNotNull(RealmList<Long> fieldLongListNotNull) {
+        this.fieldLongListNotNull = fieldLongListNotNull;
+    }
+
+    public RealmList<Long> getFieldLongListNull() {
+        return fieldLongListNull;
+    }
+
+    public void setFieldLongListNull(RealmList<Long> fieldLongListNull) {
+        this.fieldLongListNull = fieldLongListNull;
+    }
+
+    public RealmList<Integer> getFieldIntegerListNotNull() {
+        return fieldIntegerListNotNull;
+    }
+
+    public void setFieldIntegerListNotNull(RealmList<Integer> fieldIntegerListNotNull) {
+        this.fieldIntegerListNotNull = fieldIntegerListNotNull;
+    }
+
+    public RealmList<Integer> getFieldIntegerListNull() {
+        return fieldIntegerListNull;
+    }
+
+    public void setFieldIntegerListNull(RealmList<Integer> fieldIntegerListNull) {
+        this.fieldIntegerListNull = fieldIntegerListNull;
+    }
+
+    public RealmList<Short> getFieldShortListNotNull() {
+        return fieldShortListNotNull;
+    }
+
+    public void setFieldShortListNotNull(RealmList<Short> fieldShortListNotNull) {
+        this.fieldShortListNotNull = fieldShortListNotNull;
+    }
+
+    public RealmList<Short> getFieldShortListNull() {
+        return fieldShortListNull;
+    }
+
+    public void setFieldShortListNull(RealmList<Short> fieldShortListNull) {
+        this.fieldShortListNull = fieldShortListNull;
+    }
+
+    public RealmList<Byte> getFieldByteListNotNull() {
+        return fieldByteListNotNull;
+    }
+
+    public void setFieldByteListNotNull(RealmList<Byte> fieldByteListNotNull) {
+        this.fieldByteListNotNull = fieldByteListNotNull;
+    }
+
+    public RealmList<Byte> getFieldByteListNull() {
+        return fieldByteListNull;
+    }
+
+    public void setFieldByteListNull(RealmList<Byte> fieldByteListNull) {
+        this.fieldByteListNull = fieldByteListNull;
+    }
+
+    public RealmList<Double> getFieldDoubleListNotNull() {
+        return fieldDoubleListNotNull;
+    }
+
+    public void setFieldDoubleListNotNull(RealmList<Double> fieldDoubleListNotNull) {
+        this.fieldDoubleListNotNull = fieldDoubleListNotNull;
+    }
+
+    public RealmList<Double> getFieldDoubleListNull() {
+        return fieldDoubleListNull;
+    }
+
+    public void setFieldDoubleListNull(RealmList<Double> fieldDoubleListNull) {
+        this.fieldDoubleListNull = fieldDoubleListNull;
+    }
+
+    public RealmList<Float> getFieldFloatListNotNull() {
+        return fieldFloatListNotNull;
+    }
+
+    public void setFieldFloatListNotNull(RealmList<Float> fieldFloatListNotNull) {
+        this.fieldFloatListNotNull = fieldFloatListNotNull;
+    }
+
+    public RealmList<Float> getFieldFloatListNull() {
+        return fieldFloatListNull;
+    }
+
+    public void setFieldFloatListNull(RealmList<Float> fieldFloatListNull) {
+        this.fieldFloatListNull = fieldFloatListNull;
+    }
+
+    public RealmList<Date> getFieldDateListNotNull() {
+        return fieldDateListNotNull;
+    }
+
+    public void setFieldDateListNotNull(RealmList<Date> fieldDateListNotNull) {
+        this.fieldDateListNotNull = fieldDateListNotNull;
+    }
+
+    public RealmList<Date> getFieldDateListNull() {
+        return fieldDateListNull;
+    }
+
+    public void setFieldDateListNull(RealmList<Date> fieldDateListNull) {
+        this.fieldDateListNull = fieldDateListNull;
     }
 }

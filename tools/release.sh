@@ -2,7 +2,6 @@
 
 # Script to make release on the local machine.
 # See https://github.com/realm/realm-wiki/wiki/Java-Release-Checklist for more details.
-# FIXME: Only patch release is supported now.
 
 set -euo pipefail
 IFS=$'\n\t'
@@ -93,13 +92,35 @@ prepare_branch() {
     git fetch --all
     git checkout releases
     git reset --hard origin/releases
-    if [[ "$BRANCH_TO_RELEASE" != "releases" ]] ; then
-        echo "Releasing from other branches than 'releases' is not supported right now."
-        exit -1
-    fi
-
     git clean -xfd
     git submodule update --init --recursive
+
+    # Merge the branch to the releases branch and check the CHANGELOG.md
+    if [[ "$BRANCH_TO_RELEASE" != "releases" ]] ; then
+        git merge "origin/$BRANCH_TO_RELEASE"
+        git submodule update --init --recursive
+
+        while true
+        do
+            read -r -p "Type the command to edit CHANGELOG.md, default(vim):" editor
+            if [ -z "$editor" ] ; then
+                editor="vim"
+            fi
+            "$editor" CHANGELOG.md
+
+            read -r -p "Please merge the unreleased entries in the 'CHANGELOG.md' and then press any key to continue..." _
+            if [ "$(grep -c "YYYY-MM-DD" CHANGELOG.md)" -eq 1 ] ; then
+                break
+            else
+                echo "There are more than one or none unreleased entries in the 'CHANGELOG.md'."
+            fi
+        done
+        # CHANGELOG.md is modified.
+        if ! git diff-index --quiet HEAD CHANGELOG.md ; then
+            git add CHANGELOG.md
+            git commit -m "Merge entries in changelog"
+        fi
+    fi
 
     if ! grep -q "SNAPSHOT" version.txt ; then
         echo "'version.txt' doesn't contain 'SNAPSHOT'."
@@ -124,7 +145,7 @@ prepare_branch() {
 
     # Update date in change log
     cur_date=$(date "+%F")
-    sed -i "1 s/YYYY-MM-DD/${cur_date}/" CHANGELOG.md
+    sed "1 s/YYYY-MM-DD/${cur_date}/" CHANGELOG.md > CHANGELOG.md.tmp && mv CHANGELOG.md.tmp CHANGELOG.md
     git add CHANGELOG.md
     git commit -m "Update changelog date"
 
@@ -144,7 +165,7 @@ build() {
     check_adb_device
 
     # Verify examples
-    (cd examples && ./gradlew uninstallAll && ./gradlew monkeyDebug)
+    (cd examples && ./gradlew clean uninstallAll && ./gradlew monkeyDebug)
 }
 
 upload_to_bintray() {
@@ -179,7 +200,7 @@ publish_distribution() {
     # Test
     check_adb_device
     pushd examples/
-    ./gradlew uninstallAll
+    ./gradlew clean uninstallAll
     ./gradlew monkeyRelease
     popd
     popd
@@ -191,8 +212,14 @@ push_release() {
 
     # Push branch & tag
     git checkout releases
-    git push origin releases
-    git push origin "v${VERSION}"
+     
+     # Don't push to releases branch if we are doing a beta release.
+    if [[ ! "$VERSION" =~ [a-zA-Z] ]] ; then
+        git push origin releases
+        git push origin "v${VERSION}"
+    else
+        echo "Non-final release. Release was not pushed to Github. Remember to remove commits on `releases` branch manually."
+    fi
 }
 
 publish_javadoc() {
@@ -213,8 +240,9 @@ publish_javadoc() {
         esac
     done
     git clean -xfd ./source/en/docs/java/
+    bundle update
     bundle exec rake generate:java_docs[$VERSION]
-    cp -R "${REALM_JAVA_PATH}/realm/realm-library/build/docs/javadoc/*" ./source/en/docs/java/latest/api/
+    cp -R "${REALM_JAVA_PATH}"/realm/realm-library/build/docs/javadoc/* ./source/en/docs/java/latest/api/
     bundle exec rake generate:inject_ga_latest_java_api
     git add ./source/en/docs/java/
     git commit -m "Release realm-java doc ${VERSION}"

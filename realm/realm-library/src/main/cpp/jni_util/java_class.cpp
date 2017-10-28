@@ -21,6 +21,12 @@
 
 using namespace realm::jni_util;
 
+JavaClass::JavaClass()
+    : m_ref_owner()
+    , m_class(nullptr)
+{
+}
+
 JavaClass::JavaClass(JNIEnv* env, const char* class_name, bool free_on_unload)
     : m_ref_owner(get_jclass(env, class_name))
     , m_class(reinterpret_cast<jclass>(m_ref_owner.get()))
@@ -31,12 +37,18 @@ JavaClass::JavaClass(JNIEnv* env, const char* class_name, bool free_on_unload)
     }
 }
 
+JavaClass::JavaClass(JavaClass&& rhs)
+    : m_ref_owner(std::move(rhs.m_ref_owner))
+    , m_class(rhs.m_class)
+{
+    rhs.m_class = nullptr;
+}
+
 JavaGlobalRef JavaClass::get_jclass(JNIEnv* env, const char* class_name)
 {
     jclass cls = env->FindClass(class_name);
-    REALM_ASSERT_DEBUG(cls);
+    REALM_ASSERT_RELEASE_EX(cls, class_name);
 
-    JavaGlobalRef cls_ref(env, cls);
-    env->DeleteLocalRef(cls);
+    JavaGlobalRef cls_ref(env, cls, true);
     return cls_ref;
 }
